@@ -1,0 +1,59 @@
+// Run with: $(spack location -i graphviz)/bin/dot -Tsvg -o input.svg input.dot
+
+digraph "Pacbio Nanopore Pipeline" {
+
+    overlap=false
+
+    // ----- Title -----
+    label="Pacbio Nanopore Pipeline"
+    labelloc="t"
+    labeljust="c"
+    fontsize=40         
+
+    node [shape=box fontsize=20]
+
+    // ----- Left side nodes -----
+    Input_fasta [label="INPUT: genome.fasta"]
+    Input_gff3  [label="INPUT: genome.gff3"]
+    Input_fastq [label="INPUT: genome_nanopore.fastq"]
+    Input_bam   [label="INPUT: genome_pacbio.subread.bam"]
+
+    Step1_trf  [label="STEP 1: TRF
+		Script: trf.sh
+		Output: genome_trf.bed"]
+    Step2_edta [label="STEP 2: EDTA
+		Script: edta.sh
+		Output: genome_edta.bed"]
+    Step3_mn   [label="STEP 3: meth_nanopore
+		Script: meth_bed_nanopore.sh
+		Output: genome_meth.bed, fenome_nano_sorted.bam, genome_nano_sorted.bam.bai"]
+    Step4_mp   [label="STEP 4: meth_pacbio
+		Script: ccsmeth.sh
+		Output: genome_meth.bed, genome_pacbio_sorted.bam, genome_pacbio_sorted.bam.bai"]
+
+    // ----- Right side nodes -----
+    Step5_cn   [label="STEP 5: centromere_nanopore
+		Script: centromere_pipeline_nanopore.sh"]
+    Step6_cp   [label="STEP 6: centromere_pacbio
+		Script: centromere_pipeline_pacbio.sh"]
+
+    // ----- Input arrows ----
+    Input_fasta -> Step1_trf
+    Input_fasta -> Step2_edta
+    Input_fasta -> Step3_mn
+    Input_fasta -> Step4_mp
+    Input_gff3  -> Step2_edta
+    Input_fastq -> Step3_mn
+    Input_bam   -> Step4_mp
+
+    // ----- Nanopore arrows (red) -----
+    Step1_trf  -> Step5_cn [color="red"]
+    Step2_edta -> Step5_cn [color="red"]
+    Step3_mn   -> Step5_cn [color="red"]
+
+    // ----- PacBio arrows (blue) -----
+    Step1_trf  -> Step6_cp [color="blue"]
+    Step2_edta -> Step6_cp [color="blue"]
+    Step4_mp   -> Step6_cp [color="blue"]
+}
+
