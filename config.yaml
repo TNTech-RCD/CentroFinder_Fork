@@ -1,2 +1,3 @@
-samples: ["Guy11_Final_S4"]
-output_dir: "results"
+samples:
+    Guy11_Final_S4: data/nanopore/Guy11_Final_S4.fasta
+ 
