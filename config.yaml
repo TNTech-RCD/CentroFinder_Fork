@@ -1,3 +1,14 @@
 samples:
     Guy11_Final_S4: data/nanopore/Guy11_Final_S4.fasta
  
+trf_params:  # defaults are 2 7 7 80 10 50 2000 -h
+    match: 2
+    mismatch: 7
+    delta: 7
+    pm: 80
+    pi: 10
+    minscore: 50
+    maxperiod: 2000
+    options: -h
+
+
