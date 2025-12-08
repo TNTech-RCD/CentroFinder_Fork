@@ -25,13 +25,22 @@ digraph "Pacbio Nanopore Pipeline" {
     Input_fastq [label="INPUT: genome_nanopore.fastq"]
     Input_bam   [label="INPUT: genome_pacbio.subread.bam"]
 
-    Step1a_trf  [label="STEP 1a: TRF
+    Step1a_trf  [label="STEP 1a: TRF - process genome and create dat file
 		Script: trf.sh
 		Output: genome.fasta.2.7.7.80.10.50.2000.dat"]
-    Step1b_trf  [label="STEP 1b: TRF
+    Step1b_trf  [label="STEP 1b: TRF - convert to bed file
 		Script: trf.sh
 		Output: genome_trf.bed"]
-    Step2_edta [label="STEP 2: EDTA
+    Step2a_edta [label="STEP 2a: EDTA - gffread
+		Script: edta.sh
+		Output: genome_cds.fasta"]
+    Step2b_edta [label="STEP 2b: EDTA - gff2bed
+		Script: edta.sh
+		Output: genome.bed"]
+    Step2c_edta [label="STEP 2c: EDTA - annotate TEs
+		Script: edta.sh
+		Output: genome.fasta.mod.EDTA.TEanno.gffs"]
+    Step2d_edta [label="STEP 2d: EDTA - convert to bed
 		Script: edta.sh
 		Output: genome_edta.bed"]
     Step3_mn   [label="STEP 3: meth_nanopore
@@ -50,21 +59,24 @@ digraph "Pacbio Nanopore Pipeline" {
     // ----- Input arrows ----
     Input_fasta -> Step1a_trf
     Step1a_trf  -> Step1b_trf
-    Input_fasta -> Step2_edta
+    Input_fasta -> Step2a_edta
+    Step2a_edta -> Step2b_edta
+    Step2b_edta -> Step2c_edta
+    Step2c_edta -> Step2d_edta
     Input_fasta -> Step3_mn
     Input_fasta -> Step4_mp
-    Input_gff3  -> Step2_edta
+    Input_gff3  -> Step2a_edta
     Input_fastq -> Step3_mn
     Input_bam   -> Step4_mp
 
     // ----- Nanopore arrows (red) -----
-    Step1b_trf  -> Step5_cn [color="red"]
-    Step2_edta  -> Step5_cn [color="red"]
-    Step3_mn    -> Step5_cn [color="red"]
+    Step1b_trf   -> Step5_cn [color="red"]
+    Step2d_edta  -> Step5_cn [color="red"]
+    Step3_mn     -> Step5_cn [color="red"]
 
     // ----- PacBio arrows (blue) -----
-    Step1_trf   -> Step6_cp [color="blue"]
-    Step2_edta  -> Step6_cp [color="blue"]
-    Step4_mp    -> Step6_cp [color="blue"]
+    Step1b_trf    -> Step6_cp [color="blue"]
+    Step2d_edta   -> Step6_cp [color="blue"]
+    Step4_mp      -> Step6_cp [color="blue"]
 }
 
