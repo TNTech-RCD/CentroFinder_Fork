@@ -31,7 +31,7 @@ digraph "Pacbio Nanopore Pipeline" {
     Step1b_trf  [label="STEP 1b: TRF - convert to bed file
 		Script: trf.sh
 		Output: genome_trf.bed"]
-    Step2a_edta [label="STEP 2a: EDTA - gffread
+    Step2a_edta [label="STEP 2a: EDTA - get cds
 		Script: edta.sh
 		Output: genome_cds.fasta"]
     Step2b_edta [label="STEP 2b: EDTA - gff2bed
@@ -60,7 +60,7 @@ digraph "Pacbio Nanopore Pipeline" {
     Input_fasta -> Step1a_trf
     Step1a_trf  -> Step1b_trf
     Input_fasta -> Step2a_edta
-    Step2a_edta -> Step2b_edta
+    Step2a_edta -> Step2c_edta
     Step2b_edta -> Step2c_edta
     Step2c_edta -> Step2d_edta
     Input_fasta -> Step3_mn
