@@ -4,7 +4,8 @@ samples:
 
 nanopore_dir: data/nanopore
 pacbio_dir: data/pacbio
- 
+
+# Specific to TRF steps 
 trf_params:  # defaults are 2 7 7 80 10 50 2000 -h
     match: 2
     mismatch: 7
@@ -15,4 +16,22 @@ trf_params:  # defaults are 2 7 7 80 10 50 2000 -h
     maxperiod: 2000
     options: -h
 
+cpus_per_task: 12
+    
+# Singularity + EDTA
+container:
+  binary: singularity
+  binds:
+    - /usr/bin/which
+    - /work
+    - $(spack location -i ncbi-rmblastn):/rmblast
+  env:
+    PATH: /usr/local/bin:$PATH
 
+edta:
+  sif: /work/projects/its/scolson/biology/sahar_software_pipeline/CentromerDetection/edta2.sif
+  species: others
+  overwrite: 1
+  sensitive: 1
+  anno: 1
+  force: 1
