@@ -43,7 +43,7 @@ def get_base_dir(sample):
 
 def get_path_with_ext(wildcards, ext):
     base = get_base_dir(wildcards.sample)
-    return f"{base}/{wildcards.sample}.{ext}"
+    return f"{base}/{wildcards.sample}/{wildcards.sample}.{ext}"
 
 def get_fasta(wildcards):
     return get_path_with_ext(wildcards, "fasta")
@@ -79,43 +79,48 @@ rule run_trf:
     log:
         "logs/run_trf_{sample}.log"
     run:
+        # Ensure directories exist
         os.makedirs(os.path.dirname(output[0]), exist_ok=True)
         os.makedirs(os.path.dirname(log[0]), exist_ok=True)
 
-        # Set the work directory for TRF to "results/"
+        # Work directory for TRF is the results dir for this file
         results_dir = os.path.dirname(output[0])
 
-        # Show TRF where the input will be from "results/"
+        # Make input path relative to results_dir
         input_rel = os.path.relpath(input[0], results_dir)
 
         trf_command = f"trf {input_rel} {TRF_PARAM_STRING}"
 
-        # This code modified from https://stackoverflow.com/questions/45613881/what-would-be-an-elegant-way-of-preventing-snakemake-from-failing-upon-shell-r-e
         try:
-            proc_output = subprocess.check_output(trf_command, shell=True, cwd=results_dir, stderr=subprocess.STDOUT)
+            # Run TRF; this will raise CalledProcessError on non-zero exit codes
+            proc_output = subprocess.check_output(
+                trf_command,
+                shell=True,
+                cwd=results_dir,
+                stderr=subprocess.STDOUT,
+            )
 
-            # Log what TRF is doing
+            # Log normal output
             with open(log[0], "wb") as lf:
                 lf.write(proc_output)
+                lf.write(b"\nTRF exit code: 0\n")
 
-        # an exception is raised by check_output() for non-zero exit codes (usually returned to indicate failure)
         except subprocess.CalledProcessError as exc:
-            # Capture errors in the log as well
+            # Log TRF output and exit code even on non-zero exit
             with open(log[0], "wb") as lf:
                 if exc.output:
                     lf.write(exc.output)
                 lf.write(f"\nTRF exit code: {exc.returncode}\n".encode())
 
-            # Current releases of TRF (up to 4.09.1) return an exit code of the number of TRs processed
-            # Anything less than 3 should be treated as an error code. Otherwise, this should pass
-            if exc.returncode is not None and exc.returncode >= 3:
-                pass
-            else:
+            # If TRF did not produce the expected .dat file, THEN treat as failure
+            if not os.path.exists(output[0]):
                 raise
 
-        # Make certain that output file is created
+        # Final safety check: make sure the .dat file exists
         if not os.path.exists(output[0]):
-            raise Exception(f"TRF did not produce expected output file: {output[0]}")
+            raise Exception(
+                f"TRF failed to produce expected output file: {output[0]}"
+            )
 
 rule convert_trf_to_bed:
     input:
