@@ -43,9 +43,22 @@ digraph "Pacbio Nanopore Pipeline" {
     Step2d_edta [label="STEP 2d: EDTA - convert to bed
 		Script: edta.sh
 		Output: genome_edta.bed"]
-    Step3_mn   [label="STEP 3: meth_nanopore
+    Step3a_mn   [label="STEP 3a: meth_nanopore - minimap2
 		Script: meth_bed_nanopore.sh
-		Output: genome_meth.bed, fenome_nano_sorted.bam, genome_nano_sorted.bam.bai"]
+                Run: minimap2 -t '$THREADS' -ax map-ont -Y genome.fasta genome.fastq > genome.sam
+		Output: genome.sam"]
+    Step3b_mn   [label="STEP 3b: meth_nanopore - samtools_sort
+		Script: meth_bed_nanopore.sh
+                Run: samtools sort -@ '$THREADS' -o genome_sorted.bam genome.sam
+		Output: genome_sorted.bam"]
+    Step3c_mn   [label="STEP 3c: meth_nanopore - samtools_index
+		Script: meth_bed_nanopore.sh
+                Run: samtools index genome_sorted.bam
+		Output: genome_sorted.bam.bai"]
+    Step3d_mn   [label="STEP 3d: meth_nanopore - modbam2bed
+		Script: meth_bed_nanopore.sh
+                Run: ./modbam2bed genome.fasta genome_sorted.bam > genome.bed
+		Output: genome_methyl.bed"]
     Step4_mp   [label="STEP 4: meth_pacbio
 		Script: ccsmeth.sh
 		Output: genome_meth.bed, genome_pacbio_sorted.bam, genome_pacbio_sorted.bam.bai"]
@@ -63,16 +76,19 @@ digraph "Pacbio Nanopore Pipeline" {
     Step2a_edta -> Step2c_edta
     Step2b_edta -> Step2c_edta
     Step2c_edta -> Step2d_edta
-    Input_fasta -> Step3_mn
+    Input_fasta -> Step3a_mn
     Input_fasta -> Step4_mp
     Input_gff3  -> Step2a_edta
-    Input_fastq -> Step3_mn
+    Input_fastq -> Step3a_mn
+    Step3a_mn   -> Step3b_mn
+    Step3b_mn   -> Step3c_mn
+    Step3c_mn   -> Step3d_mn
     Input_bam   -> Step4_mp
 
     // ----- Nanopore arrows (red) -----
     Step1b_trf   -> Step5_cn [color="red"]
     Step2d_edta  -> Step5_cn [color="red"]
-    Step3_mn     -> Step5_cn [color="red"]
+    Step3d_mn     -> Step5_cn [color="red"]
 
     // ----- PacBio arrows (blue) -----
     Step1b_trf    -> Step6_cp [color="blue"]
