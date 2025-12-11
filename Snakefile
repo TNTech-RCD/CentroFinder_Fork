@@ -69,6 +69,7 @@ rule all:
     input:
         expand("results/{sample}_trf.bed", sample=SAMPLES_LIST),
         expand("results/{sample}_edta.bed", sample=SAMPLES_LIST)
+        expand("results/{sample}_methyl.bed", sample=SAMPLES_LIST)
 
 #### TRF ####
 rule run_trf:
@@ -91,6 +92,7 @@ rule run_trf:
 
         trf_command = f"trf {input_rel} {TRF_PARAM_STRING}"
 
+        # This code modified from https://stackoverflow.com/questions/45613881/what-would-be-an-elegant-way-of-preventing-snakemake-from-failing-upon-shell-r-e
         try:
             # Run TRF; this will raise CalledProcessError on non-zero exit codes
             proc_output = subprocess.check_output(
@@ -239,3 +241,34 @@ rule edta_bed:
                 print $1, $4-1, $5, $3, class, $6, $7
              }}' {input.edta_gff} > {output} 2> {log}
         """
+
+##### Meth Nanopore #####
+rule mn_minimap2:
+    input:
+        fasta = get_fasta
+        fastq = get_fastq
+    output:
+        "results/{sample}/meth_nanopore/{sample}.sam"
+    log:
+        "logs/{sample}/minimap2_{sample}.log"
+    shell:
+
+rule mn_samtools_sort:
+    input:
+    output:
+    log:
+    shell:
+
+rule mn_samtools_index:
+    input:
+    output:
+    log:
+    shell:
+
+rule mn_modbam2bed:
+    input:
+    output:
+    log:
+    shell:
+
+
