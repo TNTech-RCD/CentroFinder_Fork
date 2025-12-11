@@ -294,7 +294,7 @@ rule mn_samtools_index:
 
 rule mn_modbam2bed:
     input:
-        fasta = get_fasta
+        fasta = get_fasta,
         bam = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam"
     output:
         bed = "results/{sample}/METH_NANOPORE/{sample}_methyl.bed"
