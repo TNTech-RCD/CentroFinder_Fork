@@ -59,9 +59,22 @@ digraph "Pacbio Nanopore Pipeline" {
 		Script: meth_bed_nanopore.sh
                 Run: ./modbam2bed genome.fasta genome_sorted.bam > genome.bed
 		Output: genome_methyl.bed"]
-    Step4_mp   [label="STEP 4: meth_pacbio
+    Step4a_mp   [label="STEP 4a: meth_pacbio - ccsmeth call reads
 		Script: ccsmeth.sh
-		Output: genome_meth.bed, genome_pacbio_sorted.bam, genome_pacbio_sorted.bam.bai"]
+                Run: ccsmeth call_hifi --subreads genome.subreads.bam --threads {threads} --output genome.hifi.bam
+		Output: genome.hifi.bam"]
+    Step4b_mp   [label="STEP 4b: meth_pacbio - ccsmeth align reads
+		Script: ccsmeth.sh
+                Run: ccsmeth aligh_hifi --hifireads genome.hifi.bam --ref genome.fasta  --output genome.hifi.pbmm2.bam --threads {threads}
+		Output: genome.hifi.pbmm2.bam"]
+    Step4c_mp   [label="STEP 4: meth_pacbio - ccsmeth call mods
+		Script: ccsmeth.sh
+                Run: CUDA_VISIBLE_DEVICES=0 ccsmeth call_mods --input genome.pbmm2.bam --ref genome.fasta --model_file {model} --output genome.pbmm2.call_mods --threads {threads} --threads_call 2 --model_type attbigru2s --mode align
+		Output: genome.hifi.pbmm2.call_mods"]
+    Step4d_mp   [label="STEP 4: meth_pacbio - ccsmeth call freqb
+		Script: ccsmeth.sh
+                Run: ccsmeth call_freqb --input_bam genome.hifi.pbmm2.call_mods.modbam.bam --ref genome.fasta --output genome.hifi.pbmm2.call_mods.modbam.freq --threads {threads} --sort --bed --call_mode aggregate --aggre_model {model}
+		Output: genome.hifi.pbmm2.call_mods.modbam.freq"]
 
     // ----- Right side nodes -----
     Step5_cn   [label="STEP 5: centromere_nanopore
@@ -77,22 +90,27 @@ digraph "Pacbio Nanopore Pipeline" {
     Step2b_edta -> Step2c_edta
     Step2c_edta -> Step2d_edta
     Input_fasta -> Step3a_mn
-    Input_fasta -> Step4_mp
     Input_gff3  -> Step2a_edta
     Input_fastq -> Step3a_mn
     Step3a_mn   -> Step3b_mn
     Step3b_mn   -> Step3c_mn
     Step3c_mn   -> Step3d_mn
-    Input_bam   -> Step4_mp
+    Input_bam   -> Step4a_mp
+    Input_fasta -> Step4b_mp
+    Step4a_mp   -> Step4b_mp
+    Input_fasta -> Step4c_mp
+    Step4b_mp   -> Step4c_mp
+    Input_fasta -> Step4d_mp
+    Step4C_mp   -> Step4d_mp
 
     // ----- Nanopore arrows (red) -----
     Step1b_trf   -> Step5_cn [color="red"]
     Step2d_edta  -> Step5_cn [color="red"]
-    Step3d_mn     -> Step5_cn [color="red"]
+    Step3d_mn    -> Step5_cn [color="red"]
 
     // ----- PacBio arrows (blue) -----
     Step1b_trf    -> Step6_cp [color="blue"]
     Step2d_edta   -> Step6_cp [color="blue"]
-    Step4_mp      -> Step6_cp [color="blue"]
+    Step4d_mp     -> Step6_cp [color="blue"]
 }
 
