@@ -75,8 +75,9 @@ rule all:
         expand("results/{sample}/TRF/{sample}_trf.bed", sample=SAMPLES_LIST),
         expand("results/{sample}/EDTA/{sample}_edta.bed", sample=SAMPLES_LIST),
         expand("results/{sample}/METH_NANOPORE/{sample}_methyl.bed", sample=SAMPLES_LIST),
-#        expand("results/{sample}/METH_NANOPORE/{sample}.hifi.pbmm2.call_mods.modbam.bam", sample=SAMPLES_LIST),
-        expand("results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.freq.aggregate.all.bed", sample=SAMPLES_LIST)
+        expand("results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.freq.aggregate.all.bed", sample=SAMPLES_LIST),
+        # Centromere Scoring Notes
+        expand("resultsa/{sample}/CENTROMERE_SCORING/{sample}.fasta.fai", sample=SAMPLES_LIST)
 
 #### TRF ####
 rule run_trf:
@@ -418,3 +419,19 @@ rule ccsmeth_call_freqb:
             --aggre_model {params.model_file} &> {log}
         """
 
+############# Centromere Scoring ##############
+rule centromere_scoring_index_fai:
+    input:
+        fasta = get_fasta
+    output:
+        fai = "results/{sample}/CENTROMERE_SCORING/{sample}.fasta.fai"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/index_fai_{sample}.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        samtools faidx {input.fasta}
+
+        mv {input.fasta}.fai {output.fai} &> {log}
+        """
