@@ -10,7 +10,7 @@
 #     snakemake --cores 12
 #         OR
 #     snakemake --use-conda --cores 12 results/Fo4287v4/METH_PACBIO/Fo4287v4.hifi.pbmm2.bam
-# Create DAG: snakemake --dag | dot -Tsvg > test.svg
+# Create DAG: snakemake --dag results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1.1000.te.sorted.bed | dot -Tsvg > centromere_pipeline_Guy11_chr1.svg
 
 import os
 import subprocess
@@ -85,6 +85,7 @@ rule all:
 #        expand("results/{sample}/CENTROMERE_SCORING/{sample}.fasta.fai", sample=SAMPLES_LIST)
         expand("results/{sample}/CENTROMERE_SCORING/windows.{sample}.{window}bp.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.trf.sorted.bed", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.te.sorted.bed", sample=SAMPLES_LIST, window=WINDOW),
 
 #### TRF ####
 rule run_trf:
@@ -488,3 +489,16 @@ rule centromere_scoring_trf2bed_sort:
         }}' OFS="\t" {input.trf_bed} | sort -k1,1V -k2,2n > {output.sorted_bed} &> {log}
         """
 
+rule centromere_scoring_sort_TE:
+    input:
+        edta = rules.edta_bed.output
+    output:
+        sorted_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.te.sorted.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/sorted_TE_{sample}.{window}.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        sort -k1,1V -k2,2n {input.edta} > {output.sorted_bed} &> {log}
+        """
