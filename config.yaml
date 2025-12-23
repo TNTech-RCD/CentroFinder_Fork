@@ -54,3 +54,7 @@ ccsmeth:
     call_freqb:
         call_mode: aggregate
         model_file: "../models/model_ccsmeth_5mCpG_aggregate_attbigru_b11.v2p.ckpt"
+
+# Centromere Scoring
+window: 1000
+
