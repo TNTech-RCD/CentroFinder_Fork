@@ -85,7 +85,8 @@ rule all:
         expand("results/{sample}/CENTROMERE_SCORING/windows.{sample}.{window}bp.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.trf.sorted.bed", sample=SAMPLES_LIST),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.te.sorted.bed", sample=SAMPLES_LIST),
-        expand("results/{sample}/CENTROMERE_SCORING/{sample}.methylation.sorted.bedgraph", sample=SAMPLES_LIST)
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}.methylation.sorted.bedgraph", sample=SAMPLES_LIST),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.trf_counts.bed", sample=SAMPLES_LIST),
 
 #### TRF ####
 rule run_trf:
@@ -530,4 +531,21 @@ rule centromere_scoring_sort_methylation:
             awk 'BEGIN{{OFS="\t"}} {{print $1,$2,$3,$11}}' {input.methyl} \
                 | sort -k1,1V -k2,2n > {output.bedgraph} &> {log}
         fi
+        """
+
+rule centromere_scoring_TRF_coverage:
+    input:
+        bed = rules.centromere_scoring_make_windows.output.bed,
+        trf_bed = rules.centromere_scoring_trf2bed_sort.output.sorted_bed
+    output:
+        tmp_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.trf_counts.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/TRF_coverage_{sample}.log"
+    params:
+        window = config["window"],
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        bedtools coverage -a {input.bed} -b {input.trf_bed} -counts > {output.tmp_bed} &> {log}
         """
