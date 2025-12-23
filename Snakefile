@@ -89,6 +89,7 @@ rule all:
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.trf_counts.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.te_counts.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.genes.bed", sample=SAMPLES_LIST),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gene_counts.bed", sample=SAMPLES_LIST, window=WINDOW)
 
 #### TRF ####
 rule run_trf:
@@ -581,4 +582,19 @@ rule centromere_scoring_gene_counts:
         mkdir -p "$(dirname {log})"
 
         awk '$3=="gene" {{print $1"\t"($4-1)"\t"$5"\t"$9}}' {input.gff3} > {output.genes_bed} &> {log}
+        """
+
+rule centromere_scoring_gene_counts_bedtools_coverage:
+    input:
+        genes_bed = rules.centromere_scoring_gene_counts.output.genes_bed,
+        window_bed = rules.centromere_scoring_make_windows.output.bed
+    output:
+        genes_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gene_counts.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/{sample}.{window}.gene_countss.bedtools_coverage.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        bedtools coverage -a {input.window_bed} -b {input.genes_bed} -counts > {output.genes_bed} &> {log}
         """
