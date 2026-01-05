@@ -10,8 +10,8 @@
 #     snakemake --cores 12
 #         OR
 #     snakemake --use-conda --cores 12 results/Fo4287v4/METH_PACBIO/Fo4287v4.hifi.pbmm2.bam
-#     snakemake --use-conda --conda-frontend conda --cores 12 results/Fo4287v4/CENTROMERE_SCORING/Fo4287v4.1000.tmp.meth_mean.bed
-#     snakemake --use-conda --conda-frontend conda --cores 12 results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1.1000.tmp.meth_mean.bed
+#     snakemake --use-conda --conda-frontend conda --cores 12 results/Fo4287v4/CENTROMERE_SCORING/Fo4287v4.1000.tmp.gc_content.bed
+#     snakemake --use-conda --conda-frontend conda --cores 12 results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1.1000.tmp.gc_content.bed
 # Create DAG: snakemake --dag results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1.1000.te.sorted.bed | dot -Tsvg > centromere_pipeline_Guy11_chr1.svg
 
 import os
@@ -95,6 +95,7 @@ rule all:
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.hifi.depth.bed", sample=SAMPLES_LIST),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.hifi_cov_mean.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.meth_mean.bed", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gc_content.bed", sample=SAMPLES_LIST, window=WINDOW),
 
 #### TRF ####
 rule run_trf:
@@ -664,3 +665,20 @@ rule centromere_scoring_mean_methylation_per_window:
             bedtools map -nonamecheck -a {input.window} -b {input.bedgraph} -c 4 -o mean -null 0 > {output.bed} &> {log}
         fi
         """
+
+rule centromere_scoring_calculate_gc_content_per_window:
+    input:
+        fasta = get_fasta,
+        window = rules.centromere_scoring_make_windows.output.bed
+    output:
+        bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gc_content.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/calculate_gc_content_per_window_{sample}_{window}.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        bedtools nuc -fi {input.fasta} -bed {input.window} | awk 'NR>1 {{print $1"\t"$2"\t"$3"\t"$5}}' > {output.bed} &> {log}
+        """
+
+
