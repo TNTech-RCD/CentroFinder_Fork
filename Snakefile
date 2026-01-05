@@ -10,6 +10,8 @@
 #     snakemake --cores 12
 #         OR
 #     snakemake --use-conda --cores 12 results/Fo4287v4/METH_PACBIO/Fo4287v4.hifi.pbmm2.bam
+#     snakemake --use-conda --conda-frontend conda --cores 12 results/Fo4287v4/CENTROMERE_SCORING/Fo4287v4.hifi.depth.bed
+#     snakemake --use-conda --conda-frontend conda --cores 12 results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1.hifi.depth.bed
 # Create DAG: snakemake --dag results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1.1000.te.sorted.bed | dot -Tsvg > centromere_pipeline_Guy11_chr1.svg
 
 import os
@@ -89,7 +91,8 @@ rule all:
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.trf_counts.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.te_counts.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.genes.bed", sample=SAMPLES_LIST),
-        expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gene_counts.bed", sample=SAMPLES_LIST, window=WINDOW)
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gene_counts.bed", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}.hifi.depth.bed", sample=SAMPLES_LIST),
 
 #### TRF ####
 rule run_trf:
@@ -597,4 +600,29 @@ rule centromere_scoring_gene_counts_bedtools_coverage:
         mkdir -p "$(dirname {log})"
 
         bedtools coverage -a {input.window_bed} -b {input.genes_bed} -counts > {output.genes_bed} &> {log}
+        """
+
+rule centromere_scoring_hifi_coverage:
+    input:
+        hifi = lambda wildcard: (
+            rules.mn_samtools_sort.output.bam
+            if is_nanopore(wildcard.sample)
+            else rules.ccsmeth_align_reads.output.bam
+        )
+    output:
+        bed = "results/{sample}/CENTROMERE_SCORING/{sample}.hifi.depth.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/hifi_coverage_{sample}.log"
+    params:
+        do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        if [ "{params.do_sort}" = "true" ]; then
+            samtools depth -a {input.hifi} | awk '{{print $1"\t"$2-1"\t"$2"\t"$3}}' \
+            | sort -k1,1V -k2,2n > {output.bed} &> {log}
+        else
+            samtools depth -a {input.hifi} | awk '{{print $1"\t"$2-1"\t"$2"\t"$3}}' > {output.bed} &> {log}
+        fi
         """
