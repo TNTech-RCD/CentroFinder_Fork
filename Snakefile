@@ -10,8 +10,8 @@
 #     snakemake --cores 12
 #         OR
 #     snakemake --use-conda --cores 12 results/Fo4287v4/METH_PACBIO/Fo4287v4.hifi.pbmm2.bam
-#     snakemake --use-conda --conda-frontend conda --cores 12 results/Fo4287v4/CENTROMERE_SCORING/Fo4287v4.1000.windows.features.tsv
-#     snakemake --use-conda --conda-frontend conda --cores 12 results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1.1000.windows.features.tsv
+#     snakemake --use-conda --conda-frontend conda --cores 12 results/Fo4287v4/CENTROMERE_SCORING/Fo4287v4_1000/centro_candidates.bed
+#     snakemake --use-conda --conda-frontend conda --cores 12 results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1_1000/centro_best_windows_marked.tsv
 # Create DAG: snakemake --dag results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1.1000.te.sorted.bed | dot -Tsvg > centromere_pipeline_Guy11_chr1.svg
 
 import os
@@ -54,6 +54,9 @@ def get_path_with_ext(wildcards, ext):
 def get_fasta(wildcards):
     return get_path_with_ext(wildcards, "fasta")
 
+def get_fai(wildcards):
+    return get_path_with_ext(wildcards, "fasta.fai")
+
 def get_gff3(wildcards):
     return get_path_with_ext(wildcards, "gff3")
 
@@ -84,7 +87,7 @@ rule all:
         expand("results/{sample}/METH_NANOPORE/{sample}_methyl.bed", sample=SAMPLES_LIST),
         expand("results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.freq.aggregate.all.bed", sample=SAMPLES_LIST),
         # Centromere Scoring Notes
-        expand("results/{sample}/CENTROMERE_SCORING/windows.{sample}.{window}bp.bed", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}.windows.{window}bp.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.trf.sorted.bed", sample=SAMPLES_LIST),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.te.sorted.bed", sample=SAMPLES_LIST),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.methylation.sorted.bedgraph", sample=SAMPLES_LIST),
@@ -97,6 +100,9 @@ rule all:
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.meth_mean.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gc_content.bed", sample=SAMPLES_LIST, window=WINDOW),
         expand("results/{sample}/CENTROMERE_SCORING/{sample}.{window}.windows.features.tsv", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_windows_ranked.tsv", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_best_windows_marked.tsv", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_candidates.bed", sample=SAMPLES_LIST, window=WINDOW),
 
 #### TRF ####
 rule run_trf:
@@ -459,7 +465,7 @@ rule centromere_scoring_make_windows:
     input:
         fai = rules.centromere_scoring_index_fai.output.fai
     output:
-        bed = "results/{sample}/CENTROMERE_SCORING/windows.{sample}.{window}bp.bed"
+        bed = "results/{sample}/CENTROMERE_SCORING/{sample}.windows.{window}bp.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/{sample}_window_{window}.log"
     params:
@@ -470,11 +476,14 @@ rule centromere_scoring_make_windows:
         mkdir -p "$(dirname {log})"
 
         if [ "{params.do_sort}" = "true" ]; then
-            bedtools makewindows -g {input.fai} -w {params.window} \
-              | sort -k1,1V -k2,2n > {output.bed} &> {log}
+            {{ bedtools makewindows -g {input.fai} -w {params.window} \
+              | sort -k1,1V -k2,2n > {output.bed}; }} &> {log}
         else
-            bedtools makewindows -g {input.fai} -w {params.window} > {output.bed} &> {log}
+            {{ bedtools makewindows -g {input.fai} -w {params.window} > {output.bed}; }} &> {log}
         fi
+
+        # fail fast if output is empty
+        test -s {output.bed} || {{ echo "ERROR: {output.bed} is empty" >&2; exit 1; }}
         """
 
 rule centromere_scoring_trf2bed_sort:
@@ -598,7 +607,7 @@ rule centromere_scoring_gene_counts_bedtools_coverage:
     output:
         genes_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gene_counts.bed"
     log:
-        "results/{sample}/CENTROMERE_SCORING/logs/{sample}.{window}.gene_countss.bedtools_coverage.log"
+        "results/{sample}/CENTROMERE_SCORING/logs/{sample}.{window}.gene_counts.bedtools_coverage.log"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -712,4 +721,30 @@ rule centromere_scoring_combine_features:
             >> {output.tsv} &>> {log}
         """
 
+rule centromere_scoring_python:
+    input:
+        features = rules.centromere_scoring_combine_features.output.tsv,
+        fai = rules.centromere_scoring_index_fai.output.fai
+#        fai      = get_fai
+    output:
+        ranked = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_windows_ranked.tsv",
+        best   = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_best_windows_marked.tsv",
+        bed    = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_candidates.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/logs/centromere_scoring_final_{sample}.log"
+    params:
+        outdir = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}"
+    shell:
+        r"""
+        mkdir -p "{params.outdir}/logs"
+
+        cp "{input.features}" "{params.outdir}/windows.features.tsv"
+
+        # Use an absolute log path so redirection still works after cd
+        LOGFILE="$(realpath "{log}")"
+        FAI="$(realpath "{input.fai}")"
+
+        cd "{params.outdir}"
+        python3 ../../../../score_centromeres.py "$FAI" &> "$LOGFILE"
+        """
 
