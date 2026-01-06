@@ -497,7 +497,7 @@ rule centromere_scoring_trf2bed_sort:
         r"""
         mkdir -p "$(dirname {log})"
 
-        awk -F'\t' '{{
+        {{ awk -F'\t' '{{
         split($1, coords, ":");
         chrom = coords[1];
         split(coords[2], range, "-");
@@ -505,7 +505,7 @@ rule centromere_scoring_trf2bed_sort:
         end = range[2];
         motif = $2;
         print chrom, start, end, motif;
-        }}' OFS="\t" {input.trf_bed} | sort -k1,1V -k2,2n > {output.sorted_bed} &> {log}
+        }}' OFS="\t" {input.trf_bed} | sort -k1,1V -k2,2n > {output.sorted_bed}; }} &> {log}
         """
 
 rule centromere_scoring_sort_TE:
@@ -519,7 +519,7 @@ rule centromere_scoring_sort_TE:
         r"""
         mkdir -p "$(dirname {log})"
 
-        sort -k1,1V -k2,2n {input.edta} > {output.sorted_bed} &> {log}
+        {{ sort -k1,1V -k2,2n {input.edta} > {output.sorted_bed}; }} &> {log}
         """
 
 rule centromere_scoring_sort_methylation:
@@ -540,15 +540,15 @@ rule centromere_scoring_sort_methylation:
         mkdir -p "$(dirname {log})"
 
         if [ "{params.do_sort}" = "true" ]; then
-            awk 'BEGIN{{OFS="\t"}} !/^#/ && $5!="nan" && $5!="NA" && $5!="" {{
+            {{ awk 'BEGIN{{OFS="\t"}} !/^#/ && $5!="nan" && $5!="NA" && $5!="" {{
                 val=$5
                 if (val < 0.0001 && val > -0.0001) next
                 if (val <= 1) val = val * 100
                 print $1, $2, $3, val
-            }}' {input.methyl} | sort -k1,1 -k2,2n > {output.bedgraph} &> {log}
+            }}' {input.methyl} | sort -k1,1 -k2,2n > {output.bedgraph}; }} &> {log}
         else
-            awk 'BEGIN{{OFS="\t"}} {{print $1,$2,$3,$11}}' {input.methyl} \
-                | sort -k1,1V -k2,2n > {output.bedgraph} &> {log}
+            {{ awk 'BEGIN{{OFS="\t"}} {{print $1,$2,$3,$11}}' {input.methyl} \
+                | sort -k1,1V -k2,2n > {output.bedgraph}; }} &> {log}
         fi
         """
 
@@ -566,7 +566,7 @@ rule centromere_scoring_TRF_coverage:
         r"""
         mkdir -p "$(dirname {log})"
 
-        bedtools coverage -a {input.bed} -b {input.trf_bed} -counts > {output.tmp_bed} &> {log}
+        {{ bedtools coverage -a {input.bed} -b {input.trf_bed} -counts > {output.tmp_bed}; }} &> {log}
         """
 
 rule centromere_scoring_TE_coverage:
@@ -583,7 +583,7 @@ rule centromere_scoring_TE_coverage:
         r"""
         mkdir -p "$(dirname {log})"
 
-        bedtools coverage -a {input.bed} -b {input.te_bed} -counts > {output.tmp_bed} &> {log}
+        {{ bedtools coverage -a {input.bed} -b {input.te_bed} -counts > {output.tmp_bed}; }} &> {log}
         """
 
 rule centromere_scoring_gene_counts:
@@ -597,7 +597,7 @@ rule centromere_scoring_gene_counts:
         r"""
         mkdir -p "$(dirname {log})"
 
-        awk '$3=="gene" {{print $1"\t"($4-1)"\t"$5"\t"$9}}' {input.gff3} > {output.genes_bed} &> {log}
+        {{ awk '$3=="gene" {{print $1"\t"($4-1)"\t"$5"\t"$9}}' {input.gff3} > {output.genes_bed}; }} &> {log}
         """
 
 rule centromere_scoring_gene_counts_bedtools_coverage:
@@ -612,7 +612,7 @@ rule centromere_scoring_gene_counts_bedtools_coverage:
         r"""
         mkdir -p "$(dirname {log})"
 
-        bedtools coverage -a {input.window_bed} -b {input.genes_bed} -counts > {output.genes_bed} &> {log}
+        {{ bedtools coverage -a {input.window_bed} -b {input.genes_bed} -counts > {output.genes_bed}; }} &> {log}
         """
 
 rule centromere_scoring_hifi_coverage:
@@ -633,10 +633,10 @@ rule centromere_scoring_hifi_coverage:
         mkdir -p "$(dirname {log})"
 
         if [ "{params.do_sort}" = "true" ]; then
-            samtools depth -a {input.hifi} | awk '{{print $1"\t"$2-1"\t"$2"\t"$3}}' \
-            | sort -k1,1V -k2,2n > {output.bed} &> {log}
+            {{ samtools depth -a {input.hifi} | awk '{{print $1"\t"$2-1"\t"$2"\t"$3}}' \
+            | sort -k1,1V -k2,2n > {output.bed}; }} &> {log}
         else
-            samtools depth -a {input.hifi} | awk '{{print $1"\t"$2-1"\t"$2"\t"$3}}' > {output.bed} &> {log}
+            {{ samtools depth -a {input.hifi} | awk '{{print $1"\t"$2-1"\t"$2"\t"$3}}' > {output.bed}; }} &> {log}
         fi
         """
 
@@ -652,7 +652,7 @@ rule centromere_scoring_hifi_coverage_bedtools_map:
         r"""
         mkdir -p "$(dirname {log})"
 
-        bedtools map -a {input.window} -b {input.bed} -c 4 -o mean -null 0 > {output.bed} &> {log}
+        {{ bedtools map -a {input.window} -b {input.bed} -c 4 -o mean -null 0 > {output.bed}; }} &> {log}
         """
 
 rule centromere_scoring_mean_methylation_per_window:
@@ -670,9 +670,9 @@ rule centromere_scoring_mean_methylation_per_window:
         mkdir -p "$(dirname {log})"
 
         if [ "{params.do_sort}" = "true" ]; then
-            bedtools map -a {input.window} -b {input.bedgraph} -c 4 -o mean -null 0 > {output.bed} &> {log}
+            {{ bedtools map -a {input.window} -b {input.bedgraph} -c 4 -o mean -null 0 > {output.bed}; }} &> {log}
         else
-            bedtools map -nonamecheck -a {input.window} -b {input.bedgraph} -c 4 -o mean -null 0 > {output.bed} &> {log}
+            {{ bedtools map -nonamecheck -a {input.window} -b {input.bedgraph} -c 4 -o mean -null 0 > {output.bed}; }} &> {log}
         fi
         """
 
@@ -688,7 +688,7 @@ rule centromere_scoring_calculate_gc_content_per_window:
         r"""
         mkdir -p "$(dirname {log})"
 
-        bedtools nuc -fi {input.fasta} -bed {input.window} | awk 'NR>1 {{print $1"\t"$2"\t"$3"\t"$5}}' > {output.bed} &> {log}
+        {{ bedtools nuc -fi {input.fasta} -bed {input.window} | awk 'NR>1 {{print $1"\t"$2"\t"$3"\t"$5}}' > {output.bed}; }} &> {log}
         """
 
 rule centromere_scoring_combine_features:
@@ -708,9 +708,9 @@ rule centromere_scoring_combine_features:
         r"""
         mkdir -p "$(dirname {log})"
 
-        echo -e "chrom\tstart\tend\ttrf_cov\tte_cov\tgene_count\thifi_cov_mean\tmeth_mean\tgc_content" > {output.tsv} &> {log}
+        {{ echo -e "chrom\tstart\tend\ttrf_cov\tte_cov\tgene_count\thifi_cov_mean\tmeth_mean\tgc_content" > {output.tsv}; }} &> {log}
 
-        paste \
+        {{ paste \
             <(cut -f1-3 {input.windows}) \
             <(cut -f4 {input.trf}) \
             <(cut -f4 {input.te}) \
@@ -718,14 +718,13 @@ rule centromere_scoring_combine_features:
             <(cut -f4 {input.hifi}) \
             <(cut -f4 {input.meth}) \
             <(cut -f4 {input.gc}) \
-            >> {output.tsv} &>> {log}
+            >> {output.tsv}; }} &>> {log}
         """
 
 rule centromere_scoring_python:
     input:
         features = rules.centromere_scoring_combine_features.output.tsv,
         fai = rules.centromere_scoring_index_fai.output.fai
-#        fai      = get_fai
     output:
         ranked = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_windows_ranked.tsv",
         best   = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_best_windows_marked.tsv",
