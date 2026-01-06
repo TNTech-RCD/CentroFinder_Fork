@@ -2,7 +2,6 @@
 *.bed
 *.dat
 *.sif
-*.svg
 logs/
 data/
 results/
