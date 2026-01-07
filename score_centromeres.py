@@ -1,6 +1,23 @@
-# cat > $OUTDIR/score_centromeres.py << 'PYCODE'
 #!/usr/bin/env python3
 import os, sys, numpy as np, pandas as pd, matplotlib.pyplot as plt
+
+def shade_excluded(ax, g, color="#D9D9D9", alpha=0.4):
+    excluded = g[g['is_excluded']]
+    if excluded.empty:
+        return
+
+    cur_s, cur_e = None, None
+    for _, r in excluded.iterrows():
+        if cur_s is None:
+            cur_s, cur_e = r['start'], r['end']
+        elif r['start'] <= cur_e:
+            cur_e = r['end']
+        else:
+            ax.axvspan(cur_s/1000, cur_e/1000, color=color, alpha=alpha, lw=0)
+            cur_s, cur_e = r['start'], r['end']
+
+    if cur_s is not None:
+        ax.axvspan(cur_s/1000, cur_e/1000, color=color, alpha=alpha, lw=0)
 
 # ==============================
 # CONFIGURATION
@@ -74,7 +91,7 @@ for chrom in df['chrom'].unique():
     exclusion_mask = start_mask | end_mask
 
     df.loc[exclusion_mask, 'is_excluded'] = True
-    df.loc[exclusion_mask, ['te_cov_n', 'gene_count_n', 'meth_diff_n']] = 0.0
+    #df.loc[exclusion_mask, ['te_cov_n', 'gene_count_n', 'meth_diff_n']] = 0.0 ##, 'trf_cov_n', 'cov_anom_n', 'gc_low_n'
 
 # Weighted scoring
 w = dict(trf=8.0, te=5.0, gene=1.0, meth=1.0, cov=0.5, gc=1.0)
@@ -86,6 +103,10 @@ df['centro_score'] = (
     w['cov'] * df['cov_anom_n'] +
     w['gc'] * df['gc_low_n']
 )
+# ==============================
+# MASK SUBTELOMERIC REGIONS FOR PLOTTING
+# ==============================
+
 
 # Rank within each chromosome
 df['rank_within_chr'] = df.groupby('chrom')['centro_score'].rank(ascending=False, method='first')
@@ -209,24 +230,35 @@ for chrom, g in df.groupby('chrom'):
             ng_start, ng_end = best_block['start'], best_block['end']
             no_gene_region = (ng_start / 1000, ng_end / 1000)
             gene_free_regions.append((chrom, int(ng_start), int(ng_end), "best_candidate"))
+    COLORS = {
+    "TRF":        "#0072B2",  # blue
+    "TE":         "#E69F00",  # orange
+    "Meth":       "#009E73",  # green
+    "Gene":       "#56B4E9",  # light blue
+    "GC":         "#CC79A7",  # purple
+    "Coverage":   "#D55E00",  # vermillion
+    "Score":      "#000000",  # black
+    "Centromere": "red"   # yellow (shaded region)
+    }
 
     # --- Plot features and scores ---
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 6), sharex=True,
-                                   gridspec_kw={'height_ratios': [1, 1]})
-    ax1.plot(x, g['trf_cov_n'], lw=1, label='TRF')
-    ax1.plot(x, g['te_cov_n'], lw=1, label='TE')
-    ax1.plot(x, g['meth_diff_n'], lw=1, label='Meth')
-    ax1.plot(x, g['gene_count_n'], lw=1, label='Gene')
-    ax1.plot(x, g['gc_low_n'], lw=1, label='GC', color='purple')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 7), sharex=True)
+    ax1.plot(x, g['trf_cov_n'],        lw=0.75, label='TRF',        color=COLORS["TRF"])
+    ax1.plot(x, g['te_cov_n'],         lw=0.75, label='TE',         color=COLORS["TE"])
+    ax1.plot(x, g['meth_diff_n'],      lw=0.75, label='Meth',       color=COLORS["Meth"])
+    ax1.plot(x, g['gene_count_n'],     lw=0.75, label='Gene',       color=COLORS["Gene"])
+    ax1.plot(x, g['gc_low_n'],         lw=0.75, label='GC',         color=COLORS["GC"])
+    ax1.plot(x, g['cov_anom_n'],       lw=0.75, label='Coverage',   color=COLORS["Coverage"])
+
     ax1.set_ylabel("Normalized Feature Values")
     ax1.set_title(f"{chrom} - Features & Centromere Score")
 
-    ax2.plot(x, g['centro_score'], color='black', lw=1.5, label='Centromere Score')
+    ax2.plot(x, g['centro_score'], lw=0.75, color=COLORS["Score"], label="Centromere Score")
     ax2.set_xlabel(f"{chrom} position (kb)")
     ax2.set_ylabel("Centromere Score")
 
     if no_gene_region is not None:
-        ax2.axvspan(no_gene_region[0], no_gene_region[1], color='yellow', alpha=0.3, label='Centromere Region')
+        ax2.axvspan(no_gene_region[0], no_gene_region[1], color=COLORS["Centromere"], alpha=0.3, label='Centromere Region')
 
     handles, labels = [], []
     for ax in [ax1, ax2]:
@@ -234,10 +266,13 @@ for chrom, g in df.groupby('chrom'):
             handles.append(line)
             labels.append(line.get_label())
     if no_gene_region is not None:
-        handles.append(ax2.fill_between([], [], [], color='yellow', alpha=0.3, label='Centromere Region'))
+        handles.append(ax2.fill_between([], [], [], color='red', alpha=0.3, label='Centromere Region'))
         labels.append('Centromere Region')
 
     fig.legend(handles, labels, loc='center right', fontsize='small')
+    # Shade subtelomeric (excluded) regions
+    for ax in [ax1, ax2]:
+        shade_excluded(ax, g)
     plt.tight_layout(rect=[0, 0, 0.85, 1])
     plt.savefig(f"{plotdir}/{chrom}_cen.pdf", dpi=150)
     plt.close()
@@ -251,5 +286,3 @@ if gene_free_regions:
     gene_free_df.to_csv(out_prefix + "_best_candidates.bed", sep='\t', index=False, header=False)
 else:
     print("Warning: No contiguous gene-free/low-TE regions identified.")
-
-# PYCODE
