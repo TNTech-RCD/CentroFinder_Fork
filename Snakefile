@@ -1,8 +1,8 @@
 # Created By: Sharon Colson
 # Creation Date: 12/01/2025
-# Last Modified: 12/09/2025
+# Last Modified: 01/06/2026
 
-# To run this on TTU HPC:
+# To run this on TN Tech Univ HPC:
 #     spack load trf snakemake graphviz
 # sample run line:
 #     snakemake -np
@@ -10,7 +10,9 @@
 #     snakemake --cores 12
 #         OR
 #     snakemake --use-conda --cores 12 results/Fo4287v4/METH_PACBIO/Fo4287v4.hifi.pbmm2.bam
-# Create DAG: snakemake --dag | dot -Tsvg > test.svg
+#     snakemake --use-conda --conda-frontend conda --cores 12 results/Fo4287v4/CENTROMERE_SCORING/Fo4287v4_1000/centro_candidates.bed
+#     snakemake --use-conda --conda-frontend conda --cores 12 results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1_1000/centro_best_windows_marked.tsv
+# Create DAG: snakemake --dag results/Guy11_chr1/CENTROMERE_SCORING/Guy11_chr1.1000.te.sorted.bed | dot -Tsvg > centromere_pipeline_Guy11_chr1.svg
 
 import os
 import subprocess
@@ -29,14 +31,25 @@ OPTIONS   = config["trf_params"]["options"]
 NANOPORE_DIR = config["nanopore_dir"]
 PACBIO_DIR   = config["pacbio_dir"]
 
-SAMPLES_DICT = config["samples"]
-SAMPLES_LIST = list(SAMPLES_DICT.keys())
+SAMPLES_BY_PLATFORM = config["samples"]
+
+NANOPORE_SAMPLES = list(SAMPLES_BY_PLATFORM.get("nanopore", {}).keys())
+PACBIO_SAMPLES = list(SAMPLES_BY_PLATFORM.get("pacbio", {}).keys())
+
+SAMPLES_LIST = NANOPORE_SAMPLES + PACBIO_SAMPLES
+
+WINDOW = config["window"]
+
+def is_nanopore(sample):
+    return sample in NANOPORE_SAMPLES
+
+def is_pacbio(sample):
+    return sample in PACBIO_SAMPLES
 
 def get_base_dir(sample):
-    platform = SAMPLES_DICT[sample]["platform"].lower()
-    if platform == "nanopore":
+    if sample in NANOPORE_SAMPLES:
         return NANOPORE_DIR
-    elif platform == "pacbio":
+    elif sample in PACBIO_SAMPLES:
         return PACBIO_DIR
     else:
         raise ValueError(f"Unknown platform: '{platform}' for sample: '{sample}'. "
@@ -49,6 +62,9 @@ def get_path_with_ext(wildcards, ext):
 
 def get_fasta(wildcards):
     return get_path_with_ext(wildcards, "fasta")
+
+def get_fai(wildcards):
+    return get_path_with_ext(wildcards, "fasta.fai")
 
 def get_gff3(wildcards):
     return get_path_with_ext(wildcards, "gff3")
@@ -72,14 +88,14 @@ TRF_SUFFIX = "." + ".".join(str(num) for num in TRF_NUMERIC_VALUES) + ".dat"
 
 rule all:
     input:
-        expand("results/{sample}/TRF/{sample}_trf.bed", sample=SAMPLES_LIST),
-        expand("results/{sample}/EDTA/{sample}_edta.bed", sample=SAMPLES_LIST),
-        expand("results/{sample}/METH_NANOPORE/{sample}_methyl.bed", sample=SAMPLES_LIST),
-#        expand("results/{sample}/METH_NANOPORE/{sample}.hifi.pbmm2.call_mods.modbam.bam", sample=SAMPLES_LIST),
-        expand("results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.freq.aggregate.all.bed", sample=SAMPLES_LIST)
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_windows_ranked.tsv", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_best_windows_marked.tsv", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_candidates.bed", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_candidates_ranked.tsv", sample=SAMPLES_LIST, window=WINDOW),
+        expand("results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_best_candidates.bed", sample=SAMPLES_LIST, window=WINDOW),
 
 #### TRF ####
-rule run_trf:
+rule TRF_run:
     input:
         get_fasta
     output:
@@ -131,9 +147,10 @@ rule run_trf:
                 f"TRF failed to produce expected output file: {output[0]}"
             )
 
-rule convert_trf_to_bed:
+rule TRF_convert_to_bed:
     input:
-        "results/{sample}/TRF/{sample}.fasta" + TRF_SUFFIX
+        rules.TRF_run.output
+#        "results/{sample}/TRF/{sample}.fasta" + TRF_SUFFIX
     output:
         "results/{sample}/TRF/{sample}_trf.bed"
     log:
@@ -148,7 +165,7 @@ rule convert_trf_to_bed:
         """
 
 ##### EDTA #####
-rule edta_cds:
+rule EDTA_cds:
     input:
         fasta = get_fasta,
         gff   = get_gff3
@@ -163,7 +180,7 @@ rule edta_cds:
         gffread -x {output.cds} -g {input.fasta} {input.gff} &> {log}
         """
 
-rule edta_gff2bed:
+rule EDTA_gff2bed:
     input:
         gff = get_gff3
     output:
@@ -177,11 +194,13 @@ rule edta_gff2bed:
         gff2bed < {input.gff} > {output.bed} 2> {log}
         """
 
-rule edta_run:
+rule EDTA_run:
     input:
         fasta = get_fasta,
-        cds = "results/{sample}/EDTA/{sample}_cds.fasta",
-        bed = "results/{sample}/EDTA/{sample}.bed"
+        cds = rules.EDTA_cds.output.cds,
+#        cds = "results/{sample}/EDTA/{sample}_cds.fasta",
+        bed = rules.EDTA_gff2bed.output.bed
+#        bed = "results/{sample}/EDTA/{sample}.bed"
     output:
         edta_gff3 = "results/{sample}/EDTA/{sample}.fasta.mod.EDTA.TEanno.gff3"
     params:
@@ -233,16 +252,17 @@ rule edta_run:
         cp "$workdir/{wildcards.sample}.fasta.mod.EDTA.TEanno.gff3" {output.edta_gff3}
         """
 
-rule edta_bed:
+rule EDTA_bed:
     input:
-        edta_gff = "results/{sample}/EDTA/{sample}.fasta.mod.EDTA.TEanno.gff3"
+        edta_gff = rules.EDTA_run.output.edta_gff3
+#        edta_gff = "results/{sample}/EDTA/{sample}.fasta.mod.EDTA.TEanno.gff3"
     output:
         "results/{sample}/EDTA/{sample}_edta.bed"
     log:
         "results/{sample}/EDTA/logs/edta_bed_final_{sample}.log"
     shell:
         r"""
-        mkdir -p $(dirname {output}) $(dirname {log})
+        mkdir -p $(dirname {log})
 
         awk 'BEGIN{{OFS="\t"}}
              !/^#/ {{
@@ -254,7 +274,7 @@ rule edta_bed:
         """
 
 ###### Meth Nanopore #####
-rule mn_minimap2:
+rule MN_minimap2:
     input:
         fasta = get_fasta,
         fastq = get_fastq
@@ -270,9 +290,10 @@ rule mn_minimap2:
         minimap2 -t {threads} -ax map-ont -Y {input.fasta} {input.fastq} > {output.sam} 2> {log}
         """
 
-rule mn_samtools_sort:
+rule MN_samtools_sort:
     input:
-        sam = "results/{sample}/METH_NANOPORE/{sample}.sam"
+        sam = rules.MN_minimap2.output.sam
+#        sam = "results/{sample}/METH_NANOPORE/{sample}.sam"
     output:
         bam = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam"
     log:
@@ -285,9 +306,10 @@ rule mn_samtools_sort:
         """
 
 
-rule mn_samtools_index:
+rule MN_samtools_index:
     input:
-        bam = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam"
+        bam = rules.MN_samtools_sort.output.bam
+#        bam = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam"
     output:
         bai = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam.bai"
     log:
@@ -299,11 +321,13 @@ rule mn_samtools_index:
         samtools index {input.bam} 2> {log}
         """
 
-rule mn_modbam2bed:
+rule MN_modbam2bed:
     input:
         fasta = get_fasta,
-        bam   = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam",
-        bai   = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam.bai"
+        bam   = rules.MN_samtools_sort.output.bam,
+#        bam   = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam",
+        bai   = rules.MN_samtools_index.output.bai
+#        bai   = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam.bai"
     output:
         bed = "results/{sample}/METH_NANOPORE/{sample}_methyl.bed"
     log:
@@ -319,7 +343,7 @@ rule mn_modbam2bed:
 
 
 #### Meth Pacbio ####
-rule ccsmeth_call_hifi:
+rule MP_ccsmeth_call_hifi:
     input:
         bam   = get_bam
     output:
@@ -329,11 +353,9 @@ rule ccsmeth_call_hifi:
     threads: config["cpus_per_task"]
     conda:
         "envs/ccsmeth.yaml"
-#        mkdir -p "$(dirname {log})"
-
     shell:
         r"""
-        mkdir -p "$(dirname {log})" "$(dirname {output.bam})"
+        mkdir -p "$(dirname {log})"
 
         ccsmeth call_hifi \
            --subreads {input.bam} \
@@ -341,10 +363,11 @@ rule ccsmeth_call_hifi:
            --output {output.bam} &> {log}
         """
 
-rule ccsmeth_align_reads:
+rule MP_ccsmeth_align_reads:
     input:
         fasta = get_fasta,
-        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.bam"
+        bam   = rules.MP_ccsmeth_call_hifi.output.bam
+#        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.bam"
     output:
         bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.bam"
     log:
@@ -363,11 +386,11 @@ rule ccsmeth_align_reads:
            --threads {threads} &> {log}
         """
 
-rule ccsmeth_call_mods:
+rule MP_ccsmeth_call_mods:
     input:
         fasta = get_fasta,
-        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.bam"
-
+        bam   = rules.MP_ccsmeth_align_reads.output.bam
+#        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.bam"
     output:
         "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.bam"
     log:
@@ -379,8 +402,6 @@ rule ccsmeth_call_mods:
         mode = config["ccsmeth"]["call_mod"]["mode"],
         out_prefix = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods"
     threads: config["cpus_per_task"]
-#    conda:
-#        "envs/ccsmeth.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -395,10 +416,11 @@ rule ccsmeth_call_mods:
             --mode {params.mode} &> {log}
         """
 
-rule ccsmeth_call_freqb:
+rule MP_ccsmeth_call_freqb:
     input:
         fasta = get_fasta,
-        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.bam"
+        bam   = rules.MP_ccsmeth_call_mods.output
+#        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.bam"
     output:
         "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.freq.aggregate.all.bed"
     log:
@@ -408,8 +430,6 @@ rule ccsmeth_call_freqb:
         call_mode = config["ccsmeth"]["call_freqb"]["call_mode"],
         out_prefix = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.freq"
     threads: config["cpus_per_task"]
-#    conda:
-#        "envs/ccsmeth.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -424,3 +444,324 @@ rule ccsmeth_call_freqb:
             --aggre_model {params.model_file} &> {log}
         """
 
+############# Centromere Scoring ##############
+rule CENTROMERE_SCORING_index_fai:
+    input:
+        fasta = get_fasta
+    output:
+        fai = "results/{sample}/CENTROMERE_SCORING/{sample}.fasta.fai"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/index_fai_{sample}.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        samtools faidx {input.fasta}
+
+        cp {input.fasta}.fai {output.fai} &> {log}
+        """
+
+rule CENTROMERE_SCORING_make_windows:
+    input:
+        fai = rules.CENTROMERE_SCORING_index_fai.output.fai
+    output:
+        bed = "results/{sample}/CENTROMERE_SCORING/{sample}.windows.{window}bp.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/{sample}_window_{window}.log"
+    params:
+        window = config["window"],
+        do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        if [ "{params.do_sort}" = "true" ]; then
+            {{ bedtools makewindows -g {input.fai} -w {params.window} \
+              | sort -k1,1V -k2,2n > {output.bed}; }} &> {log}
+        else
+            {{ bedtools makewindows -g {input.fai} -w {params.window} > {output.bed}; }} &> {log}
+        fi
+
+        # fail fast if output is empty
+        test -s {output.bed} || {{ echo "ERROR: {output.bed} is empty" >&2; exit 1; }}
+        """
+
+rule CENTROMERE_SCORING_trf2bed_sort:
+    input:
+        trf_bed = rules.TRF_convert_to_bed.output
+    output:
+        sorted_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.trf.sorted.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/trf2bed_sort_{sample}.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        {{ awk -F'\t' '{{
+        split($1, coords, ":");
+        chrom = coords[1];
+        split(coords[2], range, "-");
+        start = range[1] - 1;
+        end = range[2];
+        motif = $2;
+        print chrom, start, end, motif;
+        }}' OFS="\t" {input.trf_bed} | sort -k1,1V -k2,2n > {output.sorted_bed}; }} &> {log}
+        """
+
+rule CENTROMERE_SCORING_sort_TE:
+    input:
+        edta = rules.EDTA_bed.output
+    output:
+        sorted_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.te.sorted.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/sorted_TE_{sample}.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        {{ sort -k1,1V -k2,2n {input.edta} > {output.sorted_bed}; }} &> {log}
+        """
+
+rule CENTROMERE_SCORING_sort_methylation:
+    input:
+        methyl=lambda wildcard: (
+            rules.MN_modbam2bed.output.bed
+            if is_nanopore(wildcard.sample)
+            else rules.MP_ccsmeth_call_freqb.output
+        )
+    output:
+        bedgraph = "results/{sample}/CENTROMERE_SCORING/{sample}.methylation.sorted.bedgraph"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/sorted_methylation_{sample}.log"
+    params:
+        do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        if [ "{params.do_sort}" = "true" ]; then
+            {{ awk 'BEGIN{{OFS="\t"}} !/^#/ && $5!="nan" && $5!="NA" && $5!="" {{
+                val=$5
+                if (val < 0.0001 && val > -0.0001) next
+                if (val <= 1) val = val * 100
+                print $1, $2, $3, val
+            }}' {input.methyl} | sort -k1,1 -k2,2n > {output.bedgraph}; }} &> {log}
+        else
+            {{ awk 'BEGIN{{OFS="\t"}} {{print $1,$2,$3,$11}}' {input.methyl} \
+                | sort -k1,1V -k2,2n > {output.bedgraph}; }} &> {log}
+        fi
+        """
+
+rule CENTROMERE_SCORING_TRF_coverage:
+    input:
+        bed = rules.CENTROMERE_SCORING_make_windows.output.bed,
+        trf_bed = rules.CENTROMERE_SCORING_trf2bed_sort.output.sorted_bed
+    output:
+        tmp_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.trf_counts.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/TRF_coverage_{sample}.{window}.log"
+    params:
+        window = config["window"]
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        {{ bedtools coverage -a {input.bed} -b {input.trf_bed} -counts > {output.tmp_bed}; }} &> {log}
+        """
+
+rule CENTROMERE_SCORING_TE_coverage:
+    input:
+        bed = rules.CENTROMERE_SCORING_make_windows.output.bed,
+        te_bed = rules.CENTROMERE_SCORING_sort_TE.output.sorted_bed
+    output:
+        tmp_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.te_counts.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/TE_coverage_{sample}.{window}.log"
+    params:
+        window = config["window"]
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        {{ bedtools coverage -a {input.bed} -b {input.te_bed} -counts > {output.tmp_bed}; }} &> {log}
+        """
+
+rule CENTROMERE_SCORING_gene_counts:
+    input:
+        gff3 = get_gff3
+    output:
+        genes_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.genes.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/{sample}.genes.bed.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        {{ awk '$3=="gene" {{print $1"\t"($4-1)"\t"$5"\t"$9}}' {input.gff3} > {output.genes_bed}; }} &> {log}
+        """
+
+rule CENTROMERE_SCORING_gene_counts_bedtools_coverage:
+    input:
+        genes_bed = rules.CENTROMERE_SCORING_gene_counts.output.genes_bed,
+        window_bed = rules.CENTROMERE_SCORING_make_windows.output.bed
+    output:
+        genes_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gene_counts.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/{sample}.{window}.gene_counts.bedtools_coverage.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        {{ bedtools coverage -a {input.window_bed} -b {input.genes_bed} -counts > {output.genes_bed}; }} &> {log}
+        """
+
+rule CENTROMERE_SCORING_hifi_coverage:
+    input:
+        hifi = lambda wildcard: (
+            rules.MN_samtools_sort.output.bam
+            if is_nanopore(wildcard.sample)
+            else rules.MP_ccsmeth_align_reads.output.bam
+        )
+    output:
+        bed = "results/{sample}/CENTROMERE_SCORING/{sample}.hifi.depth.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/hifi_coverage_{sample}.log"
+    params:
+        do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        if [ "{params.do_sort}" = "true" ]; then
+            {{ samtools depth -a {input.hifi} | awk '{{print $1"\t"$2-1"\t"$2"\t"$3}}' \
+            | sort -k1,1V -k2,2n > {output.bed}; }} &> {log}
+        else
+            {{ samtools depth -a {input.hifi} | awk '{{print $1"\t"$2-1"\t"$2"\t"$3}}' > {output.bed}; }} &> {log}
+        fi
+        """
+
+rule CENTROMERE_SCORING_hifi_coverage_bedtools_map:
+    input:
+        window = rules.CENTROMERE_SCORING_make_windows.output.bed,
+        bed = rules.CENTROMERE_SCORING_hifi_coverage.output.bed
+    output:
+        bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.hifi_cov_mean.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/hifi_coverage_bedtools_map_{sample}_{window}.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        {{ bedtools map -a {input.window} -b {input.bed} -c 4 -o mean -null 0 > {output.bed}; }} &> {log}
+        """
+
+rule CENTROMERE_SCORING_mean_methylation_per_window:
+    input:
+        window = rules.CENTROMERE_SCORING_make_windows.output.bed,
+        bedgraph = rules.CENTROMERE_SCORING_sort_methylation.output.bedgraph
+    output:
+        bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.meth_mean.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/mean_methylation_per_window_{sample}_{window}.log"
+    params:
+        do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        if [ "{params.do_sort}" = "true" ]; then
+            {{ bedtools map -a {input.window} -b {input.bedgraph} -c 4 -o mean -null 0 > {output.bed}; }} &> {log}
+        else
+            {{ bedtools map -nonamecheck -a {input.window} -b {input.bedgraph} -c 4 -o mean -null 0 > {output.bed}; }} &> {log}
+        fi
+        """
+
+rule CENTROMERE_SCORING_calculate_gc_content_per_window:
+    input:
+        fasta = get_fasta,
+        window = rules.CENTROMERE_SCORING_make_windows.output.bed
+    output:
+        bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gc_content.bed"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/calculate_gc_content_per_window_{sample}_{window}.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        {{ bedtools nuc -fi {input.fasta} -bed {input.window} | awk 'NR>1 {{print $1"\t"$2"\t"$3"\t"$5}}' > {output.bed}; }} &> {log}
+        """
+
+rule CENTROMERE_SCORING_combine_features:
+    input:
+        windows = rules.CENTROMERE_SCORING_make_windows.output.bed,
+        trf     = rules.CENTROMERE_SCORING_TRF_coverage.output.tmp_bed,
+        te      = rules.CENTROMERE_SCORING_TE_coverage.output.tmp_bed,
+        gene    = rules.CENTROMERE_SCORING_gene_counts_bedtools_coverage.output.genes_bed,
+        hifi    = rules.CENTROMERE_SCORING_hifi_coverage_bedtools_map.output.bed,
+        meth    = rules.CENTROMERE_SCORING_mean_methylation_per_window.output.bed,
+        gc      = rules.CENTROMERE_SCORING_calculate_gc_content_per_window.output.bed
+    output:
+        tsv = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.windows.features.tsv"
+    log:
+        "results/{sample}/CENTROMERE_SCORING/logs/combine_features_{sample}.{window}.log"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})"
+
+        {{ echo -e "chrom\tstart\tend\ttrf_cov\tte_cov\tgene_count\thifi_cov_mean\tmeth_mean\tgc_content" > {output.tsv}; }} &> {log}
+
+        {{ paste \
+            <(cut -f1-3 {input.windows}) \
+            <(cut -f4 {input.trf}) \
+            <(cut -f4 {input.te}) \
+            <(cut -f4 {input.gene}) \
+            <(cut -f4 {input.hifi}) \
+            <(cut -f4 {input.meth}) \
+            <(cut -f4 {input.gc}) \
+            >> {output.tsv}; }} &>> {log}
+        """
+
+rule CENTROMERE_SCORING_python:
+    input:
+        features = rules.CENTROMERE_SCORING_combine_features.output.tsv,
+        fai = rules.CENTROMERE_SCORING_index_fai.output.fai
+    output:
+        windows_ranked_tsv = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_windows_ranked.tsv",
+        best_windows_tsv   = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_best_windows_marked.tsv",
+        candidates_bed    = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_candidates.bed",
+        candidates_ranked_tsv = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_candidates_ranked.tsv",
+        best_candidates_bed = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_best_candidates.bed"
+
+    log:
+        "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/logs/centromere_scoring_final_{sample}.log"
+    params:
+        outdir = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}",
+        exclusion_bp_large = config["exclusion_bp_large"],
+        exclusion_bp_min = config["exclusion_bp_min"],
+        window = config["window"],
+        trf = config["trf"],
+        te = config["te"],
+        gene = config["gene"],
+        meth = config["meth"],
+        cov = config["cov"],
+        gc = config["gc"]
+    shell:
+        r"""
+        mkdir -p "{params.outdir}/logs"
+
+        python3 score_centromeres.py \
+          --features "{input.features}" \
+          --fai "{input.fai}" \
+          --outdir "{params.outdir}" \
+          --trf "{params.trf}" \
+          --te "{params.te}" \
+          --gene "{params.gene}" \
+          --meth "{params.meth}" \
+          --cov "{params.cov}" \
+          --gc "{params.gc}" \
+          --exclusion-bp-large "{params.exclusion_bp_large}" \
+          --exclusion-bp-min "{params.exclusion_bp_min}" \
+          --window "{wildcards.window}" \
+          &> "{log}"
+        """
+        
