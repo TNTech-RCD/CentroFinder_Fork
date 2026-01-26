@@ -52,10 +52,6 @@ The file structure for storing the original data files is as follows:
            ├── Sample1.fasta  
            ├── Sample1.fastq
            └── Sample1.gff3
-       └── Sample2
-           ├── Sample2.fasta  
-           ├── Sample2.fastq
-           └── Sample2.gff3
    └── pacbio
        └── Sample3
            ├── Sample3.fasta 
@@ -67,19 +63,11 @@ For example:
 ```
 └── data
    └── nanopore
-       └── Guy11
-           ├── Guy11.fasta  
-           ├── Guy11.fastq
-           └── Guy11.gff3
-       └── Guy11_chr1
-           ├── Guy11_chr1.fasta  
-           ├── Guy11_chr1.fastq
-           └── Guy11_chr1.gff3
-   └── pacbio
-       └── Fo4287v4
-           ├── Fo4287v4.fasta 
-           ├── Fo4287v4.gff3
-           └── Fo4287v4.subreads.bam   
+       └── cdeut
+           ├── cdeut.fasta  
+           ├── cdeut.fastq
+           └── cdeut.gff3
+  
 ```
 
 It is important to note that the Snakefile is looking for the samples to be in either a nanopore or pacbio directory then inside of a directory of the sample name and files must have the specific file extensions listed above.
