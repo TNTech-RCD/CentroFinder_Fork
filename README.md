@@ -192,7 +192,7 @@ The Snakefile is looking for the specific output that you wish to create.
 We will use the files that have been used as an example throughout the documentation. 
 
 1. Ensure that the needed software has been installed and loaded.
-2. Add the data. For this example, we will use the Guy11_chr1 sample data, which will run through the nanopore portion of the pipeline. Those files should be placed in the CentromerDetection directory in data/nanopore/Guy11_chr1.
+2. Add the data. For this example, we will use the cdeut sample data, which will run through the nanopore portion of the pipeline. Those files should be placed in the CentromerDetection directory in data/nanopore/cdeut.
 3. Set your config values according to the previous instructions.
 
 You may run the entire pipeline with the following:
