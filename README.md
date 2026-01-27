@@ -1,4 +1,4 @@
-`# CentroFinder Pipeline
+## CentroFinder Pipeline
 
 This pipeline performs centromere detection and scoring for fungal genomes using Nanopore and PacBio sequencing data. It is implemented as a Snakemake workflow designed for execution on an HPC system with optional GPU acceleration.
 
@@ -225,38 +225,38 @@ cdeut_1000/
 
 ```
 
-## Key outputs
+# Key outputs
 
 - `centro_best_candidates.bed`
  
-Final predicted centromere coordinates.
+   Final predicted centromere coordinates.
 
-This file contains the best centromere interval per chromosome and represents the primary result of the pipeline.
+   This file contains the best centromere interval per chromosome and represents the primary result of the pipeline.
 
 - `centro_plots/`
  
-Per-chromosome centromere plots (*_cen.pdf) showing feature tracks and centromere scores used for prediction.
+   Per-chromosome centromere plots (*_cen.pdf) showing feature tracks and centromere scores used for prediction.
 
 - `centro_candidates.bed`
  
-All candidate centromeric intervals prior to final selection.
+   All candidate centromeric intervals prior to final selection.
 
 - `centro_candidates_ranked.tsv`
  
-Candidate intervals ranked by composite centromere score.
+   Candidate intervals ranked by composite centromere score.
 
 - `centro_windows_ranked.tsv`
  
-Sliding windows ranked by centromere score across the genome.
+   Sliding windows ranked by centromere score across the genome.
 
 - `centro_best_windows_marked.tsv`
   
-Windows contributing to the highest-scoring centromere interval for each chromosome.
+   Windows contributing to the highest-scoring centromere interval for each chromosome.
 
 - `windows.features.tsv`
   
-Per-window feature values (TRF density, TE content, methylation, GC, coverage, etc.) used in centromere scoring.
+   Per-window feature values (TRF density, TE content, methylation, GC, coverage, etc.) used in centromere scoring.
 
 - `logs/`
   
-Log files from each pipeline step.
+   Log files from each pipeline step.
