@@ -207,7 +207,7 @@ snakemake --use-conda --conda-frontend conda --cores 12
 Specifying the output file as the target will cause Snakemake to execute all required upstream steps automatically.
 
 ## Output files
-After running the centromere prediction pipeline, results are written to the output directory (e.g., cdetu_1000/) with the following structure:
+After running the centromere prediction pipeline, results are written to the output directory (e.g., `cdetu_1000/`) with the following structure:
 ```
 cdeut_1000/
 ├── centro_best_candidates.bed
