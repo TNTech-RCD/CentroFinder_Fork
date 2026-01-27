@@ -52,9 +52,10 @@ def get_base_dir(sample):
     elif sample in PACBIO_SAMPLES:
         return PACBIO_DIR
     else:
-        raise ValueError(f"Unknown platform: '{platform}' for sample: '{sample}'. "
-                          "Please check the platform specified in your config.yaml for this sample."
-                         )
+        raise ValueError(
+            f"Sample '{sample}' is not listed. "
+            "Check config.yaml sample lists."
+        )
 
 def get_path_with_ext(wildcards, ext):
     base = get_base_dir(wildcards.sample)
@@ -150,7 +151,6 @@ rule TRF_run:
 rule TRF_convert_to_bed:
     input:
         rules.TRF_run.output
-#        "results/{sample}/TRF/{sample}.fasta" + TRF_SUFFIX
     output:
         "results/{sample}/TRF/{sample}_trf.bed"
     log:
@@ -198,9 +198,7 @@ rule EDTA_run:
     input:
         fasta = get_fasta,
         cds = rules.EDTA_cds.output.cds,
-#        cds = "results/{sample}/EDTA/{sample}_cds.fasta",
         bed = rules.EDTA_gff2bed.output.bed
-#        bed = "results/{sample}/EDTA/{sample}.bed"
     output:
         edta_gff3 = "results/{sample}/EDTA/{sample}.fasta.mod.EDTA.TEanno.gff3"
     params:
@@ -255,7 +253,6 @@ rule EDTA_run:
 rule EDTA_bed:
     input:
         edta_gff = rules.EDTA_run.output.edta_gff3
-#        edta_gff = "results/{sample}/EDTA/{sample}.fasta.mod.EDTA.TEanno.gff3"
     output:
         "results/{sample}/EDTA/{sample}_edta.bed"
     log:
@@ -293,7 +290,6 @@ rule MN_minimap2:
 rule MN_samtools_sort:
     input:
         sam = rules.MN_minimap2.output.sam
-#        sam = "results/{sample}/METH_NANOPORE/{sample}.sam"
     output:
         bam = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam"
     log:
@@ -309,7 +305,6 @@ rule MN_samtools_sort:
 rule MN_samtools_index:
     input:
         bam = rules.MN_samtools_sort.output.bam
-#        bam = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam"
     output:
         bai = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam.bai"
     log:
@@ -325,9 +320,7 @@ rule MN_modbam2bed:
     input:
         fasta = get_fasta,
         bam   = rules.MN_samtools_sort.output.bam,
-#        bam   = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam",
         bai   = rules.MN_samtools_index.output.bai
-#        bai   = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam.bai"
     output:
         bed = "results/{sample}/METH_NANOPORE/{sample}_methyl.bed"
     log:
@@ -367,7 +360,6 @@ rule MP_ccsmeth_align_reads:
     input:
         fasta = get_fasta,
         bam   = rules.MP_ccsmeth_call_hifi.output.bam
-#        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.bam"
     output:
         bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.bam"
     log:
@@ -390,7 +382,6 @@ rule MP_ccsmeth_call_mods:
     input:
         fasta = get_fasta,
         bam   = rules.MP_ccsmeth_align_reads.output.bam
-#        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.bam"
     output:
         "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.bam"
     log:
@@ -420,7 +411,6 @@ rule MP_ccsmeth_call_freqb:
     input:
         fasta = get_fasta,
         bam   = rules.MP_ccsmeth_call_mods.output
-#        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.bam"
     output:
         "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.freq.aggregate.all.bed"
     log:
