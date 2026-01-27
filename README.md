@@ -67,6 +67,7 @@ For example:
            ├── cdeut.fasta # Reference genome
            ├── cdeut.fastq # Nanopore reads (FASTQ)
            └── cdeut.gff3 # Genome annotation
+
 # ================================
 # Regarding cdeut.fastq
 # ================================
@@ -76,9 +77,9 @@ For example:
 # data/nanopore/cdeut/cdeut.fastq
 ```
 
-It is important to note that the Snakefile is looking for the samples to be in either a nanopore or pacbio directory then inside of a directory of the sample name and files must have the specific file extensions listed above.
+It is important to note that the Snakefile is looking for the samples to be in either a nanopore or PacBio directory, then inside a directory of the sample name, and files must have the specific file extensions listed above.
 
-The original data files must be set up in this manner and living in the correct nanopore or pacbio directory for the Snakefile to determine the proper set of steps to traverse for the pipeline. 
+The original data files must be set up in this manner and living in the correct nanopore or PacBio directory for the Snakefile to determine the proper set of steps to traverse for the pipeline. 
 
 ## About the config.yaml
 The `config.yaml` will be your opportunity to customize the Snakefile to a certain extent. 
