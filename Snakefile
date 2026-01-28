@@ -105,7 +105,10 @@ rule TRF_run:
         "results/{sample}/TRF/{sample}.fasta" + TRF_SUFFIX
     log:
         "results/{sample}/TRF/logs/run_trf_{sample}.log"
-    run:
+    conda:
+        "envs/trf.yaml"
+    shell:
+        r"""
         # Ensure directories exist
         os.makedirs(os.path.dirname(output[0]), exist_ok=True)
         os.makedirs(os.path.dirname(log[0]), exist_ok=True)
@@ -149,6 +152,7 @@ rule TRF_run:
             raise Exception(
                 f"TRF failed to produce expected output file: {output[0]}"
             )
+        """
 
 rule TRF_convert_to_bed:
     input:
@@ -157,6 +161,8 @@ rule TRF_convert_to_bed:
         "results/{sample}/TRF/{sample}_trf.bed"
     log:
         "results/{sample}/TRF/logs/convert_trf_to_bed_{sample}.log"
+    conda:
+        "envs/trf.yaml"
     shell:
         r"""
         mkdir -p $(dirname {output}) $(dirname {log})
@@ -175,6 +181,8 @@ rule EDTA_cds:
         cds = "results/{sample}/EDTA/{sample}_cds.fasta"
     log:
         "results/{sample}/EDTA/logs/edta_cds_{sample}.log"
+    conda:
+        "envs/edta.yaml"
     shell:
         r"""
         mkdir -p $(dirname {output.cds}) $(dirname {log})
@@ -189,6 +197,8 @@ rule EDTA_gff2bed:
         bed = "results/{sample}/EDTA/{sample}.bed"
     log:
         "results/{sample}/EDTA/logs/edta_bed_{sample}.log"
+    conda:
+        "envs/edta.yaml"
     shell:
         r"""
         mkdir -p $(dirname {output.bed}) $(dirname {log})
@@ -203,6 +213,10 @@ rule EDTA_run:
         bed = rules.EDTA_gff2bed.output.bed
     output:
         edta_gff3 = "results/{sample}/EDTA/{sample}.fasta.mod.EDTA.TEanno.gff3"
+    log:
+        "results/{sample}/EDTA/logs/edta_run_{sample}.log"
+    conda:
+        "envs/edta.yaml"
     params:
         container_bin   = config["container"]["binary"],
         container_binds = ",".join(config["container"]["binds"]),
@@ -216,8 +230,6 @@ rule EDTA_run:
         edta_anno         = config["edta"]["anno"],
         edta_force        = config["edta"]["force"],
     threads: config["cpus_per_task"]
-    log:
-        "results/{sample}/EDTA/logs/edta_run_{sample}.log"
     shell:
         r"""
         workdir="results/{wildcards.sample}/EDTA/edta"
@@ -259,6 +271,8 @@ rule EDTA_bed:
         "results/{sample}/EDTA/{sample}_edta.bed"
     log:
         "results/{sample}/EDTA/logs/edta_bed_final_{sample}.log"
+    conda:
+        "envs/edta.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
@@ -281,6 +295,8 @@ rule MN_minimap2:
         sam = "results/{sample}/METH_NANOPORE/{sample}.sam"
     log:
         "results/{sample}/METH_NANOPORE/logs/minimap2_{sample}.log"
+    conda:
+        "envs/minimap.yaml"
     threads: config["cpus_per_task"]
     shell:
         r"""
@@ -296,6 +312,8 @@ rule MN_samtools_sort:
         bam = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam"
     log:
         "results/{sample}/METH_NANOPORE/logs/mn_samtools_sort_{sample}.log"
+    conda:
+        "envs/minimap.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -311,6 +329,8 @@ rule MN_samtools_index:
         bai = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam.bai"
     log:
         "results/{sample}/METH_NANOPORE/logs/mn_samtools_index_{sample}.log"
+    conda:
+        "envs/minimap.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -327,6 +347,8 @@ rule MN_modbam2bed:
         bed = "results/{sample}/METH_NANOPORE/{sample}_methyl.bed"
     log:
         "results/{sample}/METH_NANOPORE/logs/mn_modbam2bed_{sample}.log"
+    conda:
+        "envs/minimap.yaml"
     params:
         modbam2bed = config["modbam2bed"]
     shell:
@@ -345,9 +367,9 @@ rule MP_ccsmeth_call_hifi:
         bam = "results/{sample}/METH_PACBIO/{sample}.hifi.bam"
     log:
         "results/{sample}/METH_PACBIO/logs/ccsmeth_call_hifi_{sample}.log"
-    threads: config["cpus_per_task"]
     conda:
         "envs/ccsmeth.yaml"
+    threads: config["cpus_per_task"]
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -366,9 +388,9 @@ rule MP_ccsmeth_align_reads:
         bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.bam"
     log:
         "results/{sample}/METH_PACBIO/logs/ccsmeth_align_reads_{sample}.log"
-    threads: config["cpus_per_task"]
     conda:
         "envs/ccsmeth.yaml"
+    threads: config["cpus_per_task"]
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -388,6 +410,8 @@ rule MP_ccsmeth_call_mods:
         "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.bam"
     log:
         "results/{sample}/METH_PACBIO/logs/ccsmeth_call_mods_{sample}.log"
+    conda:
+        "envs/ccsmeth.yaml"
     params:
         model_file = config["ccsmeth"]["call_mod"]["model_file"],
         threads_call = config["ccsmeth"]["call_mod"]["threads_call"],
@@ -417,6 +441,8 @@ rule MP_ccsmeth_call_freqb:
         "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.freq.aggregate.all.bed"
     log:
         "results/{sample}/METH_PACBIO/logs/ccsmeth_call_freqb_{sample}.log"
+    conda:
+        "envs/ccsmeth.yaml"
     params:
         model_file = config["ccsmeth"]["call_freqb"]["model_file"],
         call_mode = config["ccsmeth"]["call_freqb"]["call_mode"],
@@ -444,6 +470,8 @@ rule CENTROMERE_SCORING_index_fai:
         fai = "results/{sample}/CENTROMERE_SCORING/{sample}.fasta.fai"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/index_fai_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -460,6 +488,8 @@ rule CENTROMERE_SCORING_make_windows:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.windows.{window}bp.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/{sample}_window_{window}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         window = config["window"],
         do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
@@ -485,6 +515,8 @@ rule CENTROMERE_SCORING_trf2bed_sort:
         sorted_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.trf.sorted.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/trf2bed_sort_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -507,6 +539,8 @@ rule CENTROMERE_SCORING_sort_TE:
         sorted_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.te.sorted.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/sorted_TE_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -525,6 +559,8 @@ rule CENTROMERE_SCORING_sort_methylation:
         bedgraph = "results/{sample}/CENTROMERE_SCORING/{sample}.methylation.sorted.bedgraph"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/sorted_methylation_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
     shell:
@@ -552,6 +588,8 @@ rule CENTROMERE_SCORING_TRF_coverage:
         tmp_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.trf_counts.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/TRF_coverage_{sample}.{window}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         window = config["window"]
     shell:
@@ -569,6 +607,8 @@ rule CENTROMERE_SCORING_TE_coverage:
         tmp_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.te_counts.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/TE_coverage_{sample}.{window}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         window = config["window"]
     shell:
@@ -585,6 +625,8 @@ rule CENTROMERE_SCORING_gene_counts:
         genes_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.genes.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/{sample}.genes.bed.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -600,6 +642,8 @@ rule CENTROMERE_SCORING_gene_counts_bedtools_coverage:
         genes_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gene_counts.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/{sample}.{window}.gene_counts.bedtools_coverage.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -618,6 +662,8 @@ rule CENTROMERE_SCORING_hifi_coverage:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.hifi.depth.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/hifi_coverage_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
     shell:
@@ -640,6 +686,8 @@ rule CENTROMERE_SCORING_hifi_coverage_bedtools_map:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.hifi_cov_mean.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/hifi_coverage_bedtools_map_{sample}_{window}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -655,6 +703,8 @@ rule CENTROMERE_SCORING_mean_methylation_per_window:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.meth_mean.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/mean_methylation_per_window_{sample}_{window}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
     shell:
@@ -676,6 +726,8 @@ rule CENTROMERE_SCORING_calculate_gc_content_per_window:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gc_content.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/calculate_gc_content_per_window_{sample}_{window}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -696,6 +748,8 @@ rule CENTROMERE_SCORING_combine_features:
         tsv = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.windows.features.tsv"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/combine_features_{sample}.{window}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -725,6 +779,8 @@ rule CENTROMERE_SCORING_python:
         best_candidates_bed = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_best_candidates.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/logs/centromere_scoring_final_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         outdir = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}",
         platform = lambda wc: get_platform(wc.sample),
