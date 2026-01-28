@@ -5,6 +5,6 @@ channels:
   - defaults
 dependencies:
   - samtools
-  - cdhit
+  - cd-hit
   - gffread
   - bedops
