@@ -3,7 +3,8 @@
 *.dat
 *.sif
 logs/
-data/
+data/nanopore/Guy*
+data/pacbio/*
 results/
 
 spack_load.txt
