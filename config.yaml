@@ -1,8 +1,8 @@
 samples:
     nanopore:
-        cdetu:
+        cdeut:
     pacbio:
-
+        
 nanopore_dir: data/nanopore
 pacbio_dir: data/pacbio
 
