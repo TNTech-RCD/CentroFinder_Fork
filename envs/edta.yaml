@@ -8,3 +8,4 @@ dependencies:
   - cd-hit
   - gffread
   - bedops
+  - rmblast
