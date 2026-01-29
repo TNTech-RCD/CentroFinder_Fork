@@ -31,10 +31,21 @@ OPTIONS   = config["trf_params"]["options"]
 NANOPORE_DIR = config["nanopore_dir"]
 PACBIO_DIR   = config["pacbio_dir"]
 
-SAMPLES_BY_PLATFORM = config["samples"]
+SAMPLES_BY_PLATFORM = config["samples"] or {}
 
-NANOPORE_SAMPLES = list(SAMPLES_BY_PLATFORM.get("nanopore", {}).keys())
-PACBIO_SAMPLES = list(SAMPLES_BY_PLATFORM.get("pacbio", {}).keys())
+NANOPORE_DICT = SAMPLES_BY_PLATFORM.get("nanopore") or {}
+PACBIO_DICT   = SAMPLES_BY_PLATFORM.get("pacbio") or {}
+
+# Fail if neither platform has samples
+if not NANOPORE_DICT and not PACBIO_DICT:
+    raise ValueError(
+        "Config error: at least one of 'samples.nanopore' or "
+        "'samples.pacbio' must be defined with ≥1 sample."
+    )
+
+# Extract sample lists
+NANOPORE_SAMPLES = list(NANOPORE_DICT.keys())
+PACBIO_SAMPLES   = list(PACBIO_DICT.keys())
 
 SAMPLES_LIST = NANOPORE_SAMPLES + PACBIO_SAMPLES
 
@@ -46,15 +57,18 @@ def is_nanopore(sample):
 def is_pacbio(sample):
     return sample in PACBIO_SAMPLES
 
-def get_base_dir(sample):
+def get_platform(sample):
     if sample in NANOPORE_SAMPLES:
+        return "nanopore"
+    if sample in PACBIO_SAMPLES:
+        return "pacbio"
+    raise ValueError(f"Sample '{sample}' not found under config['samples']['nanopore'] or ['pacbio'].")
+
+def get_base_dir(sample):
+    platform = get_platform(sample)
+    if platform == "nanopore":
         return NANOPORE_DIR
-    elif sample in PACBIO_SAMPLES:
-        return PACBIO_DIR
-    else:
-        raise ValueError(f"Unknown platform: '{platform}' for sample: '{sample}'. "
-                          "Please check the platform specified in your config.yaml for this sample."
-                         )
+    return PACBIO_DIR
 
 def get_path_with_ext(wildcards, ext):
     base = get_base_dir(wildcards.sample)
@@ -102,59 +116,64 @@ rule TRF_run:
         "results/{sample}/TRF/{sample}.fasta" + TRF_SUFFIX
     log:
         "results/{sample}/TRF/logs/run_trf_{sample}.log"
-    run:
-        # Ensure directories exist
-        os.makedirs(os.path.dirname(output[0]), exist_ok=True)
-        os.makedirs(os.path.dirname(log[0]), exist_ok=True)
-
-        # Work directory for TRF is the results dir for this file
-        results_dir = os.path.dirname(output[0])
-
-        # Make input path relative to results_dir
-        input_rel = os.path.relpath(input[0], results_dir)
-
-        trf_command = f"trf {input_rel} {TRF_PARAM_STRING}"
-
-        # This code modified from https://stackoverflow.com/questions/45613881/what-would-be-an-elegant-way-of-preventing-snakemake-from-failing-upon-shell-r-e
-        try:
-            # Run TRF; this will raise CalledProcessError on non-zero exit codes
-            proc_output = subprocess.check_output(
-                trf_command,
-                shell=True,
-                cwd=results_dir,
-                stderr=subprocess.STDOUT,
-            )
-
-            # Log normal output
-            with open(log[0], "wb") as lf:
-                lf.write(proc_output)
-                lf.write(b"\nTRF exit code: 0\n")
-
-        except subprocess.CalledProcessError as exc:
-            # Log TRF output and exit code even on non-zero exit
-            with open(log[0], "wb") as lf:
-                if exc.output:
-                    lf.write(exc.output)
-                lf.write(f"\nTRF exit code: {exc.returncode}\n".encode())
-
-            # If TRF did not produce the expected .dat file, THEN treat as failure
-            if not os.path.exists(output[0]):
-                raise
-
-        # Final safety check: make sure the .dat file exists
-        if not os.path.exists(output[0]):
-            raise Exception(
-                f"TRF failed to produce expected output file: {output[0]}"
-            )
+    conda:
+        "envs/trf.yaml"
+    script:
+        "scripts/run_trf.py"
+        
+#        # Ensure directories exist
+#        os.makedirs(os.path.dirname(output[0]), exist_ok=True)
+#        os.makedirs(os.path.dirname(log[0]), exist_ok=True)
+#
+#        # Work directory for TRF is the results dir for this file
+#        results_dir = os.path.dirname(output[0])
+#
+#        # Make input path relative to results_dir
+#        input_rel = os.path.relpath(input[0], results_dir)
+#
+#        trf_command = f"trf {input_rel} {TRF_PARAM_STRING}"
+#
+#        # This code modified from https://stackoverflow.com/questions/45613881/what-would-be-an-elegant-way-of-preventing-snakemake-from-failing-upon-shell-r-e
+#        try:
+#            # Run TRF; this will raise CalledProcessError on non-zero exit codes
+#            proc_output = subprocess.check_output(
+#                trf_command,
+#                shell=True,
+#                cwd=results_dir,
+#                stderr=subprocess.STDOUT,
+#            )
+#
+#            # Log normal output
+#            with open(log[0], "wb") as lf:
+#                lf.write(proc_output)
+#                lf.write(b"\nTRF exit code: 0\n")
+#
+#        except subprocess.CalledProcessError as exc:
+#            # Log TRF output and exit code even on non-zero exit
+#            with open(log[0], "wb") as lf:
+#                if exc.output:
+#                    lf.write(exc.output)
+#                lf.write(f"\nTRF exit code: {exc.returncode}\n".encode())
+#
+#            # If TRF did not produce the expected .dat file, THEN treat as failure
+#            if not os.path.exists(output[0]):
+#                raise
+#
+#        # Final safety check: make sure the .dat file exists
+#        if not os.path.exists(output[0]):
+#            raise Exception(
+#                f"TRF failed to produce expected output file: {output[0]}"
+#            )
 
 rule TRF_convert_to_bed:
     input:
         rules.TRF_run.output
-#        "results/{sample}/TRF/{sample}.fasta" + TRF_SUFFIX
     output:
         "results/{sample}/TRF/{sample}_trf.bed"
     log:
         "results/{sample}/TRF/logs/convert_trf_to_bed_{sample}.log"
+    conda:
+        "envs/trf.yaml"
     shell:
         r"""
         mkdir -p $(dirname {output}) $(dirname {log})
@@ -173,6 +192,8 @@ rule EDTA_cds:
         cds = "results/{sample}/EDTA/{sample}_cds.fasta"
     log:
         "results/{sample}/EDTA/logs/edta_cds_{sample}.log"
+    conda:
+        "envs/edta.yaml"
     shell:
         r"""
         mkdir -p $(dirname {output.cds}) $(dirname {log})
@@ -187,6 +208,8 @@ rule EDTA_gff2bed:
         bed = "results/{sample}/EDTA/{sample}.bed"
     log:
         "results/{sample}/EDTA/logs/edta_bed_{sample}.log"
+    conda:
+        "envs/edta.yaml"
     shell:
         r"""
         mkdir -p $(dirname {output.bed}) $(dirname {log})
@@ -198,11 +221,13 @@ rule EDTA_run:
     input:
         fasta = get_fasta,
         cds = rules.EDTA_cds.output.cds,
-#        cds = "results/{sample}/EDTA/{sample}_cds.fasta",
         bed = rules.EDTA_gff2bed.output.bed
-#        bed = "results/{sample}/EDTA/{sample}.bed"
     output:
         edta_gff3 = "results/{sample}/EDTA/{sample}.fasta.mod.EDTA.TEanno.gff3"
+    log:
+        "results/{sample}/EDTA/logs/edta_run_{sample}.log"
+    conda:
+        "envs/edta.yaml"
     params:
         container_bin   = config["container"]["binary"],
         container_binds = ",".join(config["container"]["binds"]),
@@ -216,8 +241,6 @@ rule EDTA_run:
         edta_anno         = config["edta"]["anno"],
         edta_force        = config["edta"]["force"],
     threads: config["cpus_per_task"]
-    log:
-        "results/{sample}/EDTA/logs/edta_run_{sample}.log"
     shell:
         r"""
         workdir="results/{wildcards.sample}/EDTA/edta"
@@ -255,11 +278,12 @@ rule EDTA_run:
 rule EDTA_bed:
     input:
         edta_gff = rules.EDTA_run.output.edta_gff3
-#        edta_gff = "results/{sample}/EDTA/{sample}.fasta.mod.EDTA.TEanno.gff3"
     output:
         "results/{sample}/EDTA/{sample}_edta.bed"
     log:
         "results/{sample}/EDTA/logs/edta_bed_final_{sample}.log"
+    conda:
+        "envs/edta.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
@@ -282,6 +306,8 @@ rule MN_minimap2:
         sam = "results/{sample}/METH_NANOPORE/{sample}.sam"
     log:
         "results/{sample}/METH_NANOPORE/logs/minimap2_{sample}.log"
+    conda:
+        "envs/minimap.yaml"
     threads: config["cpus_per_task"]
     shell:
         r"""
@@ -293,11 +319,12 @@ rule MN_minimap2:
 rule MN_samtools_sort:
     input:
         sam = rules.MN_minimap2.output.sam
-#        sam = "results/{sample}/METH_NANOPORE/{sample}.sam"
     output:
         bam = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam"
     log:
         "results/{sample}/METH_NANOPORE/logs/mn_samtools_sort_{sample}.log"
+    conda:
+        "envs/minimap.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -309,11 +336,12 @@ rule MN_samtools_sort:
 rule MN_samtools_index:
     input:
         bam = rules.MN_samtools_sort.output.bam
-#        bam = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam"
     output:
         bai = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam.bai"
     log:
         "results/{sample}/METH_NANOPORE/logs/mn_samtools_index_{sample}.log"
+    conda:
+        "envs/minimap.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -325,20 +353,21 @@ rule MN_modbam2bed:
     input:
         fasta = get_fasta,
         bam   = rules.MN_samtools_sort.output.bam,
-#        bam   = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam",
         bai   = rules.MN_samtools_index.output.bai
-#        bai   = "results/{sample}/METH_NANOPORE/{sample}_sorted.bam.bai"
     output:
         bed = "results/{sample}/METH_NANOPORE/{sample}_methyl.bed"
     log:
         "results/{sample}/METH_NANOPORE/logs/mn_modbam2bed_{sample}.log"
-    params:
-        modbam2bed = config["modbam2bed"]
+    conda:
+        "envs/minimap.yaml"
+#    params:
+#        modbam2bed = config["modbam2bed"]
     shell:
         r"""
         mkdir -p "$(dirname {log})"
 
-        {params.modbam2bed} {input.fasta} {input.bam} > {output.bed} 2> {log}
+#        {params.modbam2bed} {input.fasta} {input.bam} > {output.bed} 2> {log}
+        modbam2bed {input.fasta} {input.bam} > {output.bed} 2> {log}
         """
 
 
@@ -350,9 +379,9 @@ rule MP_ccsmeth_call_hifi:
         bam = "results/{sample}/METH_PACBIO/{sample}.hifi.bam"
     log:
         "results/{sample}/METH_PACBIO/logs/ccsmeth_call_hifi_{sample}.log"
-    threads: config["cpus_per_task"]
     conda:
         "envs/ccsmeth.yaml"
+    threads: config["cpus_per_task"]
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -367,14 +396,13 @@ rule MP_ccsmeth_align_reads:
     input:
         fasta = get_fasta,
         bam   = rules.MP_ccsmeth_call_hifi.output.bam
-#        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.bam"
     output:
         bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.bam"
     log:
         "results/{sample}/METH_PACBIO/logs/ccsmeth_align_reads_{sample}.log"
-    threads: config["cpus_per_task"]
     conda:
         "envs/ccsmeth.yaml"
+    threads: config["cpus_per_task"]
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -390,11 +418,12 @@ rule MP_ccsmeth_call_mods:
     input:
         fasta = get_fasta,
         bam   = rules.MP_ccsmeth_align_reads.output.bam
-#        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.bam"
     output:
         "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.bam"
     log:
         "results/{sample}/METH_PACBIO/logs/ccsmeth_call_mods_{sample}.log"
+    conda:
+        "envs/ccsmeth.yaml"
     params:
         model_file = config["ccsmeth"]["call_mod"]["model_file"],
         threads_call = config["ccsmeth"]["call_mod"]["threads_call"],
@@ -420,11 +449,12 @@ rule MP_ccsmeth_call_freqb:
     input:
         fasta = get_fasta,
         bam   = rules.MP_ccsmeth_call_mods.output
-#        bam   = "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.bam"
     output:
         "results/{sample}/METH_PACBIO/{sample}.hifi.pbmm2.call_mods.modbam.freq.aggregate.all.bed"
     log:
         "results/{sample}/METH_PACBIO/logs/ccsmeth_call_freqb_{sample}.log"
+    conda:
+        "envs/ccsmeth.yaml"
     params:
         model_file = config["ccsmeth"]["call_freqb"]["model_file"],
         call_mode = config["ccsmeth"]["call_freqb"]["call_mode"],
@@ -452,6 +482,8 @@ rule CENTROMERE_SCORING_index_fai:
         fai = "results/{sample}/CENTROMERE_SCORING/{sample}.fasta.fai"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/index_fai_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -468,6 +500,8 @@ rule CENTROMERE_SCORING_make_windows:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.windows.{window}bp.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/{sample}_window_{window}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         window = config["window"],
         do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
@@ -493,6 +527,8 @@ rule CENTROMERE_SCORING_trf2bed_sort:
         sorted_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.trf.sorted.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/trf2bed_sort_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -515,6 +551,8 @@ rule CENTROMERE_SCORING_sort_TE:
         sorted_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.te.sorted.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/sorted_TE_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -533,6 +571,8 @@ rule CENTROMERE_SCORING_sort_methylation:
         bedgraph = "results/{sample}/CENTROMERE_SCORING/{sample}.methylation.sorted.bedgraph"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/sorted_methylation_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
     shell:
@@ -560,6 +600,8 @@ rule CENTROMERE_SCORING_TRF_coverage:
         tmp_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.trf_counts.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/TRF_coverage_{sample}.{window}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         window = config["window"]
     shell:
@@ -577,6 +619,8 @@ rule CENTROMERE_SCORING_TE_coverage:
         tmp_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.te_counts.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/TE_coverage_{sample}.{window}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         window = config["window"]
     shell:
@@ -593,6 +637,8 @@ rule CENTROMERE_SCORING_gene_counts:
         genes_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.genes.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/{sample}.genes.bed.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -608,6 +654,8 @@ rule CENTROMERE_SCORING_gene_counts_bedtools_coverage:
         genes_bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gene_counts.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/{sample}.{window}.gene_counts.bedtools_coverage.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -626,6 +674,8 @@ rule CENTROMERE_SCORING_hifi_coverage:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.hifi.depth.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/hifi_coverage_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
     shell:
@@ -648,6 +698,8 @@ rule CENTROMERE_SCORING_hifi_coverage_bedtools_map:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.hifi_cov_mean.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/hifi_coverage_bedtools_map_{sample}_{window}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -663,6 +715,8 @@ rule CENTROMERE_SCORING_mean_methylation_per_window:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.meth_mean.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/mean_methylation_per_window_{sample}_{window}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         do_sort = lambda wildcard: "true" if is_nanopore(wildcard.sample) else "false"
     shell:
@@ -684,6 +738,8 @@ rule CENTROMERE_SCORING_calculate_gc_content_per_window:
         bed = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.tmp.gc_content.bed"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/calculate_gc_content_per_window_{sample}_{window}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -704,6 +760,8 @@ rule CENTROMERE_SCORING_combine_features:
         tsv = "results/{sample}/CENTROMERE_SCORING/{sample}.{window}.windows.features.tsv"
     log:
         "results/{sample}/CENTROMERE_SCORING/logs/combine_features_{sample}.{window}.log"
+    conda:
+        "envs/centro.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log})"
@@ -731,11 +789,13 @@ rule CENTROMERE_SCORING_python:
         candidates_bed    = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_candidates.bed",
         candidates_ranked_tsv = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_candidates_ranked.tsv",
         best_candidates_bed = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/centro_best_candidates.bed"
-
     log:
         "results/{sample}/CENTROMERE_SCORING/{sample}_{window}/logs/centromere_scoring_final_{sample}.log"
+    conda:
+        "envs/centro.yaml"
     params:
         outdir = "results/{sample}/CENTROMERE_SCORING/{sample}_{window}",
+        platform = lambda wc: get_platform(wc.sample),
         exclusion_bp_large = config["exclusion_bp_large"],
         exclusion_bp_min = config["exclusion_bp_min"],
         window = config["window"],
@@ -753,6 +813,7 @@ rule CENTROMERE_SCORING_python:
           --features "{input.features}" \
           --fai "{input.fai}" \
           --outdir "{params.outdir}" \
+          --platform "{params.platform}" \
           --trf "{params.trf}" \
           --te "{params.te}" \
           --gene "{params.gene}" \

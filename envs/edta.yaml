@@ -1,0 +1,11 @@
+name: edta_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - samtools
+  - cd-hit
+  - gffread
+  - bedops
+  - rmblast
