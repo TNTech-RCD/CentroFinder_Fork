@@ -200,11 +200,11 @@ edta:
 # Meth Pacbio
 ccsmeth:
     call_mod:
-        model_file: "../models/ # Location of your model files 
+        model_file: "CentroFinder/models/ # Location of your model files 
         model_ccsmeth_5mCpG_call_mods_attbigru2s_b21.v3.ckpt" # Specific model file to be used.
 
     call_freqb:
-        model_file: "../models/model_ccsmeth_5mCpG_aggregate_attbigru_b11.v2p.ckpt"
+        model_file: "CentroFinder/models/model_ccsmeth_5mCpG_aggregate_attbigru_b11.v2p.ckpt"
 ```
 ## Quick Start
 This pipeline may be run using conda environments via the included env.yaml.
